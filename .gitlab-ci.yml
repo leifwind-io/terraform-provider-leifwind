@@ -1,0 +1,54 @@
+stages: [lint, test, release]
+
+variables:
+  GO_IMAGE: "golang:1.25"
+
+lint:
+  stage: lint
+  image: golangci/golangci-lint:v2.4.0
+  script:
+    - golangci-lint run ./...
+    - cd client && golangci-lint run ./...
+
+commitlint:
+  stage: lint
+  image: node:22-alpine
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - npx --yes -p @commitlint/cli@19 -p @commitlint/config-conventional@19
+      commitlint --extends @commitlint/config-conventional
+      --from "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --to HEAD
+
+.containers: &containers
+  image: $GO_IMAGE
+  services:
+    - name: docker:27-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    TESTCONTAINERS_HOST_OVERRIDE: docker
+  before_script:
+    # registry auth for the private backend image (job-token allowlist on the backend project)
+    - mkdir -p ~/.docker
+    - >
+      echo "{\"auths\":{\"registry.gitlab.com\":{\"auth\":\"$(echo -n gitlab-ci-token:$CI_JOB_TOKEN | base64 -w0)\"}}}"
+      > ~/.docker/config.json
+
+test:client:
+  stage: test
+  <<: *containers
+  script:
+    - cd client && go test ./... -v -timeout 30m
+
+test:acceptance:
+  stage: test
+  <<: *containers
+  script:
+    - apt-get update -qq && apt-get install -y -qq unzip
+    - curl -fsSL https://github.com/opentofu/opentofu/releases/download/v1.10.0/tofu_1.10.0_linux_amd64.zip -o /tmp/tofu.zip
+    - unzip -o /tmp/tofu.zip -d /usr/local/bin tofu
+    - TF_ACC=1 TF_ACC_PROVIDER_HOST=registry.opentofu.org
+      TF_ACC_TERRAFORM_PATH=/usr/local/bin/tofu
+      go test ./internal/acctest/... -v -timeout 45m
