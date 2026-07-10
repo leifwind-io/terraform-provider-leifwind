@@ -31,9 +31,6 @@ func freePort() (int, error) {
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
-// startBackend is implemented in Task 11.
-func (s *Stack) startBackend(_ bool) error { return nil }
-
 func (s *Stack) startZitadel() error {
 	ctx := s.ctx
 
