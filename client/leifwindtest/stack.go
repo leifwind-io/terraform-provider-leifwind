@@ -8,6 +8,7 @@ package leifwindtest
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -48,6 +49,16 @@ type Stack struct {
 	net          *testcontainers.DockerNetwork
 	zitadel      testcontainers.Container
 	teardown     []func()
+
+	// exchangeSetup and exchangeApp* back UserToken's one-time-per-Stack RFC
+	// 8693 setup (feature flag + impersonation policy + token-exchange OIDC
+	// app). Per-Stack, not package-level: each Stack is its own ZITADEL
+	// instance/project, so a process-wide sync.Once would silently reuse a
+	// previous (possibly torn-down) Stack's app credentials for any second
+	// Stack in the same test binary.
+	exchangeSetup           sync.Once
+	exchangeAppClientID     string
+	exchangeAppClientSecret string
 }
 
 // Start boots the stack and registers cleanup on t.
