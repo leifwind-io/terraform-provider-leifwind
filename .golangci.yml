@@ -1,0 +1,44 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - bodyclose
+    - contextcheck
+    - depguard
+    - errcheck
+    - errorlint
+    - exhaustive
+    - goheader
+    - gosec
+    - govet
+    - nilerr
+    - revive
+    - staticcheck
+    - unused
+  settings:
+    goheader:
+      template: "SPDX-License-Identifier: MPL-2.0"
+    depguard:
+      rules:
+        provider-no-net-http:
+          files:
+            - "**/internal/**"
+          deny:
+            - pkg: net/http
+              desc: provider packages must use the client module (dogfooding rule, spec §fixed-decisions)
+    exhaustive:
+      default-signifies-exhaustive: true
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
