@@ -22,7 +22,7 @@ Backend contract (verified against `main` @ `a828641`, all LW-42 endpoints merge
 | Decision | Rationale |
 |---|---|
 | GitLab primary (`gitlab.com/leifwind/stream/terraform-provider-leifwind`), GitHub push mirror for distribution | Both registries resolve providers via public GitHub repos + GitHub Releases; development, review and CI stay with the backend's GitLab group. Mirror is already configured in the GitLab UI. |
-| License AGPL-3.0-only (whole repo) | Verified 2026-07-10: neither registry restricts community-provider licenses (HashiCorp's allowed-license list applies to the Partner tier only; OpenTofu policy has no license criteria; live AGPL provider `grulicht/portainer` confirms). |
+| License MPL-2.0 (whole repo) — **owner revision 2026-07-10**, superseding the earlier AGPL-3.0-only decision | File-level copyleft suffices for a locally-run plugin binary (AGPL's §13 network clause has no practical bite for a provider); keeps HashiCorp Partner-tier eligibility open (AGPL/GPL are excluded from its allowed-license list, MPL-2.0 is on it); matches provider-ecosystem convention and lets the hcloudgroup template's MPL header tooling be reused as-is. Community-tier publishing has no license restriction either way (verified 2026-07-10). Decision is cheapest now, while the sole copyright holder. |
 | Monorepo, two Go modules: `/` (provider, terraform-plugin-framework only) + `/client` (nested module, tagged `client/vX.Y.Z`, zero `terraform-plugin-*` deps) | Client is a first-class public deliverable (LW-44 runner imports it standalone). |
 | Handwritten client mirroring `client.py` semantics; no OpenAPI codegen | Upsert + cursor semantics are subtle; the Python client is the reference implementation. |
 | Provider talks to the backend **exclusively** through `/client` (no `net/http` in provider code; depguard-enforced) | Dogfooding keeps the client honest and tested. |
@@ -50,7 +50,7 @@ Backend contract (verified against `main` @ `a828641`, all LW-42 endpoints merge
 - Image pin: `edge` temporarily (backend has no release tag yet); owner cuts a backend release in parallel; switch to the semver tag before first provider release (LW-68).
 
 ### 5. Toolchain
-- Go 1.25 (terraform-plugin-framework v1.19 floor). golangci-lint v2, strict set from day one: errcheck, govet, staticcheck, unused, gosec, bodyclose, contextcheck, revive, exhaustive, errorlint, nilerr + gofmt/goimports, over both modules. goheader enforces `// SPDX-License-Identifier: AGPL-3.0-only` on every Go file. depguard forbids `net/http` imports in provider packages (dogfooding rule).
+- Go 1.25 (terraform-plugin-framework v1.19 floor). golangci-lint v2, strict set from day one: errcheck, govet, staticcheck, unused, gosec, bodyclose, contextcheck, revive, exhaustive, errorlint, nilerr + gofmt/goimports, over both modules. goheader enforces `// SPDX-License-Identifier: MPL-2.0` on every Go file. depguard forbids `net/http` imports in provider packages (dogfooding rule).
 - pre-commit: gofmt/goimports, golangci-lint, conventional-commit message hook, `go mod tidy` check.
 
 ### 6. Auth for delegated execution
@@ -170,7 +170,7 @@ tfplugindocs-generated `docs/` (no custom templates dir) fed by runnable `exampl
 - `leifwind_fragment` resource — fragments remain field-level attributes + read-only data source.
 - `token_file` provider attribute — future, non-breaking via the TokenSource seam.
 - RFC 8693 in the production runner story — documented upgrade path only (CI exercises exchange for test-token minting).
-- SDKv2 / muxing; PAT/introspection support (backend rejects opaque tokens); rate-limit/429 handling (backend has none); Partner-tier registry listing.
+- SDKv2 / muxing; PAT/introspection support (backend rejects opaque tokens); rate-limit/429 handling (backend has none); Partner-tier registry listing (program application/review overhead — now license-eligible with MPL-2.0 should it ever be wanted).
 - First-release/registry onboarding execution — split to **LW-68**.
 
 ## Definition of done (LW-43)
