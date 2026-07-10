@@ -5,20 +5,9 @@ package leifwindtest
 import (
 	"net/url"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/google/uuid"
-)
-
-var (
-	exchangeSetup sync.Once
-	// exchangeAppClientID/Secret authenticate the token-exchange call itself.
-	// Set once by exchangeSetup, reused by every UserToken call in the
-	// process (see the "Deviation 3" comment below for why a dedicated
-	// OIDC app — not the org's machine-user credentials — is required).
-	exchangeAppClientID     string
-	exchangeAppClientSecret string
 )
 
 // UserToken mints a genuine delegated user token via RFC 8693 token
@@ -39,8 +28,10 @@ var (
 //     client_id/secret can never authenticate the exchange call itself
 //     ("invalid_client: no active client not found"); a confidential OIDC
 //     Web app with grantTypes including OIDC_GRANT_TYPE_TOKEN_EXCHANGE is
-//     required (created once, reused across orgs since it lives in the
-//     shared s.Audience project). The actor (machine user, holding
+//     required (created once per Stack via s.exchangeSetup, reused across
+//     orgs since it lives in the shared s.Audience project — see Stack's
+//     exchangeSetup field doc for why this is per-Stack, not
+//     package-level). The actor (machine user, holding
 //     ORG_END_USER_IMPERSONATOR) is unaffected — it still supplies the
 //     actor_token.
 //  3. In v4.15.3, validateTokenExchangeScopes (internal/api/oidc/
@@ -59,7 +50,7 @@ var (
 func (s *Stack) UserToken(t testing.TB, org *Org) string {
 	t.Helper()
 
-	exchangeSetup.Do(func() {
+	s.exchangeSetup.Do(func() {
 		var features struct {
 			OidcTokenExchange struct {
 				Enabled bool `json:"enabled"`
@@ -100,8 +91,8 @@ func (s *Stack) UserToken(t testing.TB, org *Org) string {
 			}, &app); err != nil {
 			t.Fatalf("create token-exchange app: %v", err)
 		}
-		exchangeAppClientID = app.ClientID
-		exchangeAppClientSecret = app.ClientSecret
+		s.exchangeAppClientID = app.ClientID
+		s.exchangeAppClientSecret = app.ClientSecret
 	})
 
 	suffix := uuid.NewString()[:8]
@@ -146,7 +137,7 @@ func (s *Stack) UserToken(t testing.TB, org *Org) string {
 		// that actually carries the email claim in v4.15.3.
 		"requested_token_type": {"urn:ietf:params:oauth:token-type:id_token"},
 	}
-	tok, status, err := fetchToken(s.Issuer, exchangeAppClientID, exchangeAppClientSecret, form)
+	tok, status, err := fetchToken(s.Issuer, s.exchangeAppClientID, s.exchangeAppClientSecret, form)
 	if err != nil || status != 200 {
 		t.Fatalf("token exchange failed (status=%d): %v — see spec 'Risks': pre-GA flag on v4.15.3; investigate before falling back", status, err)
 	}
