@@ -139,5 +139,6 @@ func (p *leifwindProvider) DataSources(context.Context) []func() datasource.Data
 		metadatads.NewEntitiesDataSource,
 		metadatads.NewFieldDataSource,
 		metadatads.NewFieldsDataSource,
+		metadatads.NewEntityFragmentsDataSource,
 	}
 }
