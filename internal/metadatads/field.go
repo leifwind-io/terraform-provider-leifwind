@@ -130,9 +130,12 @@ func (d *fieldDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 		}
 		f = got
 	}
-	cfg.ID = types.StringValue(f.ObjectID.String())
-	// keep the config/state values for project_id/entity_id: server
-	// lowercases UUIDs and these are immutable inputs
+	// keep the config values for id (when set) and project_id/entity_id:
+	// server lowercases UUIDs and these are immutable inputs (id is
+	// populated only on the by-name path)
+	if cfg.ID.IsNull() {
+		cfg.ID = types.StringValue(f.ObjectID.String())
+	}
 	cfg.Name = types.StringValue(f.Name)
 	cfg.DataType = types.StringValue(string(f.Config.DataType))
 	cfg.ConnectionType = types.StringValue(string(f.Connection.Type))
