@@ -44,7 +44,11 @@ func (r *projectResource) Metadata(_ context.Context, req resource.MetadataReque
 
 func (r *projectResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "A leifwind metadata project. The name is immutable (changes force replacement).",
+		MarkdownDescription: "A leifwind metadata project. The name is immutable (changes force replacement).\n\n" +
+			"~> **Note:** project names are globally unique across *all* tenants, not just within your " +
+			"organization (LW-71) — this is intended, a consequence of the schema-per-project design " +
+			"(each project maps to its own Postgres schema, and schema names are database-global). Pick " +
+			"project names accordingly, e.g. by namespacing them per organization.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:    true,
@@ -54,8 +58,8 @@ func (r *projectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				},
 			},
 			"name": schema.StringAttribute{
-				Required:    true,
-				Description: "Project name (unique per organization).",
+				Required:            true,
+				MarkdownDescription: "Project name. Immutable (changes force replacement). Globally unique across all tenants — see the resource description above.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},

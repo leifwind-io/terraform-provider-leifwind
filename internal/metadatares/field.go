@@ -63,7 +63,12 @@ func (r *fieldResource) Metadata(_ context.Context, req resource.MetadataRequest
 
 func (r *fieldResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "A leifwind metadata field. Only fragment_name is updatable in place; every other attribute forces replacement.",
+		MarkdownDescription: "A leifwind metadata field. Only fragment_name is updatable in place; every other attribute forces replacement.\n\n" +
+			"!> **Warning:** destroying a Terraform configuration that owns *all* of an entity's fields " +
+			"currently fails with a server 500 in `sync_entity_schema` when the last field is deleted " +
+			"(backend bug LW-70). Until the backend fix ships, keep at least one field un-managed by this " +
+			"configuration on each entity, or destroy the owning `leifwind_entity` instead of deleting every " +
+			"one of its fields individually.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:    true,
