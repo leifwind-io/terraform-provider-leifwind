@@ -1,0 +1,25 @@
+repos:
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+  - repo: local
+    hooks:
+      - id: gofmt
+        name: gofmt
+        entry: gofmt -l -w
+        language: system
+        types: [go]
+      - id: golangci-lint
+        name: golangci-lint
+        entry: make lint
+        language: system
+        pass_filenames: false
+        types: [go]
+      - id: go-mod-tidy
+        name: go mod tidy check
+        entry: bash -c 'make tidy && git diff --exit-code go.mod client/go.mod'
+        language: system
+        pass_filenames: false
+        files: go\.(mod|sum)$
