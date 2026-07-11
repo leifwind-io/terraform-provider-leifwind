@@ -176,7 +176,11 @@ func (r *fieldResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 					"this entity's KEY fields, e.g. `[leifwind_field.title.id]`. **Required for FRAGMENT fields, " +
 					"forbidden for KEY fields.** The backend requires a KEY field before FRAGMENT fields exist; " +
 					"referencing the KEY field ids here makes Terraform create the KEY first and destroy it last, " +
-					"without a manual `depends_on`. Reference **all** of the entity's KEY fields.",
+					"without a manual `depends_on`. Reference **all** of the entity's KEY fields.\n\n" +
+					"This does not cover in-place replacement of an entity's *sole* KEY field (e.g. renaming it): " +
+					"Terraform destroys the old KEY before creating the new one, and the backend rejects deleting " +
+					"the last KEY while FRAGMENT fields exist. To swap a sole KEY, add the replacement KEY under a " +
+					"new resource address, repoint `key_field_ids`, then remove the old KEY in a separate apply.",
 			},
 			"unique_key": schema.StringAttribute{
 				Computed:            true,
