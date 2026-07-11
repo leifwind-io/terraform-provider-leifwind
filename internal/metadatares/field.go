@@ -43,6 +43,7 @@ type fieldModel struct {
 	DataType       types.String `tfsdk:"data_type"`
 	ConnectionType types.String `tfsdk:"connection_type"`
 	FragmentName   types.String `tfsdk:"fragment_name"`
+	KeyFieldIDs    types.Set    `tfsdk:"key_field_ids"`
 	UniqueKey      types.String `tfsdk:"unique_key"`
 }
 
@@ -57,6 +58,39 @@ func validateFieldCombination(connectionType, fragmentName string, fragmentSet b
 	return ""
 }
 
+// validateKeyFieldIDsCombination returns "" when valid, else the error detail.
+// key_field_ids is a config-only ordering hint: required (non-empty) for
+// FRAGMENT fields, forbidden for KEY fields.
+func validateKeyFieldIDsCombination(connectionType string, keyFieldsSet, keyFieldsEmpty bool) string {
+	switch connectionType {
+	case string(client.ConnectionFragment):
+		if !keyFieldsSet || keyFieldsEmpty {
+			return "key_field_ids is required when connection_type is \"FRAGMENT\" " +
+				"(reference the entity's KEY field ids, e.g. [leifwind_field.<key>.id])"
+		}
+	case string(client.ConnectionKey):
+		if keyFieldsSet && !keyFieldsEmpty {
+			return "key_field_ids must not be set when connection_type is \"KEY\""
+		}
+	}
+	return ""
+}
+
+// setToStrings extracts the known string elements of a set (ignoring null /
+// unknown elements). Used for both apply-time validation and the wire path.
+//
+//nolint:unused // consumed starting Task 2 (LW-86 plan); introduced now per task-1 brief interface contract
+func setToStrings(s types.Set) []string {
+	elems := s.Elements()
+	out := make([]string, 0, len(elems))
+	for _, e := range elems {
+		if sv, ok := e.(types.String); ok && !sv.IsNull() && !sv.IsUnknown() {
+			out = append(out, sv.ValueString())
+		}
+	}
+	return out
+}
+
 func (r *fieldResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_field"
 }
@@ -64,11 +98,10 @@ func (r *fieldResource) Metadata(_ context.Context, req resource.MetadataRequest
 func (r *fieldResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "A leifwind metadata field. Only fragment_name is updatable in place; every other attribute forces replacement.\n\n" +
-			"!> **Warning:** destroying a Terraform configuration that owns *all* of an entity's fields " +
-			"currently fails with a server 500 in `sync_entity_schema` when the last field is deleted " +
-			"(backend bug LW-70). Until the backend fix ships, keep at least one field un-managed by this " +
-			"configuration on each entity, or destroy the owning `leifwind_entity` instead of deleting every " +
-			"one of its fields individually.",
+			"FRAGMENT fields require a sibling KEY field on the entity (backend-enforced). Set `key_field_ids` " +
+			"to the entity's KEY field ids so Terraform orders creation and destruction correctly. See the " +
+			"`key_field_ids` attribute for the one case this does not cover (in-place replacement of an entity's " +
+			"sole KEY field).",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:    true,
@@ -112,6 +145,15 @@ func (r *fieldResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				Optional:    true,
 				Description: "Fragment the field belongs to (FRAGMENT connection only). Updatable in place.",
 			},
+			"key_field_ids": schema.SetAttribute{
+				Optional:    true,
+				ElementType: types.StringType,
+				MarkdownDescription: "Ordering hint (config-only; never sent to the API). The object ids of " +
+					"this entity's KEY fields, e.g. `[leifwind_field.title.id]`. **Required for FRAGMENT fields, " +
+					"forbidden for KEY fields.** The backend requires a KEY field before FRAGMENT fields exist; " +
+					"referencing the KEY field ids here makes Terraform create the KEY first and destroy it last, " +
+					"without a manual `depends_on`. Reference **all** of the entity's KEY fields.",
+			},
 			"unique_key": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "Server-computed natural key.",
@@ -126,12 +168,17 @@ func (r *fieldResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 func (r *fieldResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	var cfg fieldModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &cfg)...)
-	if resp.Diagnostics.HasError() || cfg.ConnectionType.IsUnknown() || cfg.FragmentName.IsUnknown() {
+	if resp.Diagnostics.HasError() || cfg.ConnectionType.IsUnknown() ||
+		cfg.FragmentName.IsUnknown() || cfg.KeyFieldIDs.IsUnknown() {
 		return
 	}
 	if msg := validateFieldCombination(cfg.ConnectionType.ValueString(),
 		cfg.FragmentName.ValueString(), !cfg.FragmentName.IsNull()); msg != "" {
 		resp.Diagnostics.AddAttributeError(path.Root("fragment_name"), "Invalid field configuration", msg)
+	}
+	if msg := validateKeyFieldIDsCombination(cfg.ConnectionType.ValueString(),
+		!cfg.KeyFieldIDs.IsNull(), len(cfg.KeyFieldIDs.Elements()) == 0); msg != "" {
+		resp.Diagnostics.AddAttributeError(path.Root("key_field_ids"), "Invalid field configuration", msg)
 	}
 }
 
