@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	toxiproxy "github.com/Shopify/toxiproxy/v2/client"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/network"
 )
@@ -54,6 +55,7 @@ type Stack struct {
 	defaultOrgID string
 	net          *testcontainers.DockerNetwork
 	zitadel      testcontainers.Container
+	backendProxy *toxiproxy.Proxy
 	teardown     []func()
 
 	// exchangeSetup and exchangeApp* back UserToken's one-time-per-Stack RFC
