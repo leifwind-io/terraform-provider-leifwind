@@ -25,6 +25,7 @@ resource "leifwind_entity" "e" {
 
 func TestAccEntityLifecycle(t *testing.T) {
 	PreCheck(t)
+	t.Parallel()
 	org := NewOrg(t)
 	tok := org.Token(t, Stack())
 	resource.Test(t, resource.TestCase{

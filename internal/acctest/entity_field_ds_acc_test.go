@@ -29,6 +29,7 @@ import (
 // the Terraform config and the "all" data source's pattern were adjusted.
 func TestAccEntityAndFieldDataSources(t *testing.T) {
 	PreCheck(t)
+	t.Parallel()
 	org := NewOrg(t)
 	tok := org.Token(t, Stack())
 	cfg := ProviderConfig(tok) + `

@@ -26,6 +26,7 @@ import (
 // the KEY field and its depends_on edge.
 func TestAccEntityFragmentsDataSource(t *testing.T) {
 	PreCheck(t)
+	t.Parallel()
 	org := NewOrg(t)
 	tok := org.Token(t, Stack())
 	cfg := ProviderConfig(tok) + `
