@@ -126,6 +126,7 @@ func (p *leifwindProvider) Resources(context.Context) []func() resource.Resource
 	return []func() resource.Resource{
 		metadatares.NewProjectResource,
 		metadatares.NewEntityResource,
+		metadatares.NewFieldResource,
 	}
 }
 

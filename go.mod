@@ -7,6 +7,7 @@ replace gitlab.com/leifwind/stream/terraform-provider-leifwind/client => ./clien
 require (
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/terraform-plugin-framework v1.19.0
+	github.com/hashicorp/terraform-plugin-framework-validators v0.19.0
 	github.com/hashicorp/terraform-plugin-go v0.31.0
 	github.com/hashicorp/terraform-plugin-testing v1.16.0
 	gitlab.com/leifwind/stream/terraform-provider-leifwind/client v0.0.0-00010101000000-000000000000
