@@ -91,6 +91,20 @@ func setToStrings(s types.Set) []string {
 	return out
 }
 
+// missingKeyFieldIDs returns the supplied ids that are not present in keyIDs
+// (order preserved). nil when every supplied id is present.
+//
+//nolint:unused // consumed in Task 3 (apply-time membership validation)
+func missingKeyFieldIDs(supplied []string, keyIDs map[string]struct{}) []string {
+	var missing []string
+	for _, id := range supplied {
+		if _, ok := keyIDs[id]; !ok {
+			missing = append(missing, id)
+		}
+	}
+	return missing
+}
+
 func (r *fieldResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_field"
 }
