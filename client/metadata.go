@@ -51,6 +51,44 @@ func (s *MetadataService) IterProjects(ctx context.Context, opts ListOpts) iter.
 	})
 }
 
+// UpsertEntity creates or adopts an entity in e.ProjectID.
+func (s *MetadataService) UpsertEntity(ctx context.Context, e MetadataEntity, opts ...WriteOption) (MetadataEntity, error) {
+	var out MetadataEntity
+	err := s.c.do(ctx, "POST", "/metadata/projects/"+e.ProjectID.String()+"/entities",
+		writeValues(opts), e, &out)
+	return out, err
+}
+
+// GetEntity fetches one entity.
+func (s *MetadataService) GetEntity(ctx context.Context, projectID, entityID uuid.UUID) (MetadataEntity, error) {
+	var out MetadataEntity
+	err := s.c.do(ctx, "GET",
+		"/metadata/projects/"+projectID.String()+"/entities/"+entityID.String(), nil, nil, &out)
+	return out, err
+}
+
+// DeleteEntity deletes an entity; its fields cascade server-side.
+func (s *MetadataService) DeleteEntity(ctx context.Context, projectID, entityID uuid.UUID, opts ...WriteOption) error {
+	var out struct {
+		Detail string `json:"detail"`
+	}
+	return s.c.do(ctx, "DELETE",
+		"/metadata/projects/"+projectID.String()+"/entities/"+entityID.String(),
+		writeValues(opts), nil, &out)
+}
+
+// ListEntities returns one page of a project's entities.
+func (s *MetadataService) ListEntities(ctx context.Context, projectID uuid.UUID, opts ListOpts) (Page[MetadataEntity], error) {
+	return listPage[MetadataEntity](ctx, s.c, "/metadata/projects/"+projectID.String()+"/entities", opts)
+}
+
+// IterEntities auto-pages through a project's entities.
+func (s *MetadataService) IterEntities(ctx context.Context, projectID uuid.UUID, opts ListOpts) iter.Seq2[MetadataEntity, error] {
+	return iterPages(ctx, opts, func(ctx context.Context, o ListOpts) (Page[MetadataEntity], error) {
+		return s.ListEntities(ctx, projectID, o)
+	})
+}
+
 func listPage[T any](ctx context.Context, c *Client, path string, opts ListOpts) (Page[T], error) {
 	var out Page[T]
 	err := c.do(ctx, "GET", path, opts.values(), nil, &out)
