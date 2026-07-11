@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"gitlab.com/leifwind/stream/terraform-provider-leifwind/client"
 )
 
 // Org is a fresh tenant with one machine user (JWT access tokens).
@@ -69,6 +70,13 @@ func (s *Stack) NewOrg(t testing.TB) *Org {
 		ClientID:      secret.ClientID,
 		ClientSecret:  secret.ClientSecret,
 	}
+}
+
+// TokenSource returns an auto-refreshing client_credentials TokenSource
+// for this org against the stack's ZITADEL.
+func (o *Org) TokenSource(s *Stack) client.TokenSource {
+	return client.ClientCredentials(s.Issuer, o.ClientID, o.ClientSecret,
+		client.WithAudience(s.Audience))
 }
 
 // Token fetches one raw machine access token (client_credentials).
