@@ -15,6 +15,7 @@ import (
 
 func TestAccProjectLifecycle(t *testing.T) {
 	PreCheck(t)
+	t.Parallel()
 	org := NewOrg(t)
 	cfg := ProviderConfig(org.Token(t, Stack())) + `
 resource "leifwind_project" "p" {
@@ -43,6 +44,7 @@ resource "leifwind_project" "p" {
 
 func TestAccProjectStrictCreate(t *testing.T) {
 	PreCheck(t)
+	t.Parallel()
 	org := NewOrg(t)
 	tok := org.Token(t, Stack())
 
@@ -71,6 +73,7 @@ resource "leifwind_project" "p" {
 
 func TestAccProjectDriftRecreates(t *testing.T) {
 	PreCheck(t)
+	t.Parallel()
 	org := NewOrg(t)
 	tok := org.Token(t, Stack())
 	cfg := ProviderConfig(tok) + `

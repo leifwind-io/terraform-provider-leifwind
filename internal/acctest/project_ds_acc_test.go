@@ -11,6 +11,7 @@ import (
 
 func TestAccProjectDataSourceByIDAndName(t *testing.T) {
 	PreCheck(t)
+	t.Parallel()
 	org := NewOrg(t)
 	cfg := ProviderConfig(org.Token(t, Stack())) + `
 resource "leifwind_project" "p" {
@@ -51,6 +52,7 @@ data "leifwind_projects" "filtered" {
 
 func TestAccProjectDataSourceValidation(t *testing.T) {
 	PreCheck(t)
+	t.Parallel()
 	org := NewOrg(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: ProtoV6ProviderFactories(),

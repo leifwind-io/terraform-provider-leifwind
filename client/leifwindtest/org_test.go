@@ -8,7 +8,7 @@ import (
 )
 
 func TestNewOrgMintsJWTWithOrgAndAudience(t *testing.T) {
-	s := Start(t)
+	s := sharedStack(t)
 	org := s.NewOrg(t)
 	tok := org.Token(t, s)
 	if strings.Count(tok, ".") != 2 {

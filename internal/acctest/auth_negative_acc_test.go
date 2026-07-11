@@ -4,6 +4,7 @@ package acctest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"testing"
@@ -17,6 +18,8 @@ import (
 
 func TestAccMissingCredentials(t *testing.T) {
 	PreCheck(t)
+	// NOT t.Parallel(): t.Setenv below is incompatible with parallel tests
+	// (Go panics on the combination). This test is seconds-fast anyway.
 	// no token, no M2M block, and empty env (TF_ACC runner must not leak LEIFWIND_*)
 	t.Setenv("LEIFWIND_TOKEN", "")
 	cfg := fmt.Sprintf(`
@@ -39,6 +42,7 @@ resource "leifwind_project" "p" {
 
 func TestAccGarbageToken(t *testing.T) {
 	PreCheck(t)
+	t.Parallel()
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: ProtoV6ProviderFactories(),
 		Steps: []resource.TestStep{{
@@ -54,6 +58,7 @@ resource "leifwind_project" "p" {
 
 func TestAccForgedTokenRejected(t *testing.T) {
 	PreCheck(t)
+	t.Parallel()
 	org := NewOrg(t)
 	forged := Stack().ForgedToken(t, org)
 	resource.Test(t, resource.TestCase{
@@ -74,6 +79,7 @@ resource "leifwind_project" "p" {
 // whose cleanup would destroy it before org B's step runs).
 func TestAccCrossOrgIsolation(t *testing.T) {
 	PreCheck(t)
+	t.Parallel()
 	orgA := NewOrg(t)
 	orgB := NewOrg(t)
 
@@ -104,6 +110,7 @@ data "leifwind_project" "peek" {
 
 func TestAccInvalidImportID(t *testing.T) {
 	PreCheck(t)
+	t.Parallel()
 	org := NewOrg(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: ProtoV6ProviderFactories(),
@@ -138,26 +145,51 @@ resource "leifwind_entity" "e" {
 // lifetime too. So this test boots its OWN dedicated Stack
 // (leifwindtest.Start) instead and pays the extra container-boot cost.
 //
-// The wait is NOT just "past the token's exp": a second spike (raw HTTP,
-// bypassing Terraform, single fresh token, no reuse) showed the backend
-// still accepts this exact JWT up to ~55s past its own exp claim (200 at
-// +10s and +25s past exp; 401 first observed at +55s past exp; a fixed
-// 65s-since-mint wait then reproduced 401 reliably across repeated runs).
+// The wait is NOT just "past the token's exp" (LW-76): a second spike (raw
+// HTTP, bypassing Terraform, single fresh token, no reuse) showed the
+// backend still accepts this exact JWT up to ~55s past its own exp claim
+// (200 at +10s and +25s past exp; 401 first observed at +55s past exp).
 // Since this held on the token's very first backend contact, it cannot be
 // a positive validation cache (nothing to have cached yet) — the evidence
 // is consistent with a configured exp leeway/clock-skew allowance of
 // roughly 30-50s in the backend's JWT validation, though the exact
 // mechanism is unconfirmed (backend source is out of scope here; reported
-// to the owner as a finding — see task-27 report). 75s gives comfortable
-// margin over the observed ~55s boundary.
+// to the owner as a finding — see task-27 report). Because the exact
+// leeway boundary is the backend's business (LW-76), we don't hardcode a
+// sleep past it: we poll an authenticated backend route with the expired-
+// lifetime token every 3s until the FIRST 401 (cap 150s, comfortably past
+// the observed ~55s boundary), then run the Terraform step against the
+// now-provably-rejected token.
 func TestAccExpiredToken(t *testing.T) {
 	PreCheck(t)
+	t.Parallel() // dedicated-stack boot + expiry poll overlap the shared-stack tests
 	s := leifwindtest.Start(t)
 	s.SetAccessTokenLifetime(t, "5s")
 	org := s.NewOrg(t)
 	tok := org.Token(t, s)
 
-	time.Sleep(75 * time.Second) // clears both the 5s token lifetime and the backend's apparent exp leeway (see doc comment)
+	// LW-76 poll (see doc comment): wait for the backend itself to start
+	// rejecting the token instead of sleeping past a guessed leeway. The
+	// probe goes through the client module (depguard dogfooding rule bans
+	// net/http under internal/**), retries disabled so each probe is
+	// exactly one HTTP round trip.
+	probe, err := client.New(s.BackendURL,
+		client.WithTokenSource(client.StaticToken(tok)),
+		client.WithRetry(client.RetryConfig{MaxAttempts: 1}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pollDeadline := time.Now().Add(150 * time.Second)
+	for {
+		_, err := probe.Metadata.ListProjects(context.Background(), client.ListOpts{})
+		if errors.Is(err, client.ErrUnauthenticated) {
+			break // first 401: the backend now rejects the expired token
+		}
+		if time.Now().After(pollDeadline) {
+			t.Fatalf("backend never rejected the expired token within 150s (LW-76 leeway grew?); last err: %v", err)
+		}
+		time.Sleep(3 * time.Second)
+	}
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: ProtoV6ProviderFactories(),

@@ -8,7 +8,7 @@ import (
 )
 
 func TestStackBootsZitadel(t *testing.T) {
-	s := Start(t)
+	s := sharedStack(t)
 	resp, err := http.Get(s.Issuer + "/.well-known/openid-configuration")
 	if err != nil {
 		t.Fatal(err)
@@ -23,7 +23,7 @@ func TestStackBootsZitadel(t *testing.T) {
 }
 
 func TestBackendEnforcesAuth(t *testing.T) {
-	s := Start(t)
+	s := sharedStack(t)
 	org := s.NewOrg(t)
 
 	resp, err := http.Get(s.BackendURL + "/healthz")

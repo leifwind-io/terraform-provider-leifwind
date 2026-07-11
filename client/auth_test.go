@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"gitlab.com/leifwind/stream/terraform-provider-leifwind/client"
-	"gitlab.com/leifwind/stream/terraform-provider-leifwind/client/leifwindtest"
 )
 
 // countingTransport instruments OUR client's HTTP layer in-process: it counts
@@ -56,8 +55,16 @@ func TestStaticToken(t *testing.T) {
 }
 
 func TestClientCredentialsFetchesCachesAndRefreshes(t *testing.T) {
-	s := leifwindtest.Start(t)
+	// perf: reuse the package-shared stack from TestMain (client_test.go)
+	// instead of booting a dedicated one; the org still isolates this test.
+	// The shared stack's toxiproxy is unused here — we hit s.Issuer directly.
+	if stackErr != nil {
+		t.Fatalf("stack: %v", stackErr)
+	}
+	s := sharedStack
+	orgMu.Lock()
 	org := s.NewOrg(t)
+	orgMu.Unlock()
 
 	now := time.Now()
 	clock := func() time.Time { return now }

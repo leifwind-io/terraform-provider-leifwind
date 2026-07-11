@@ -12,6 +12,7 @@ import (
 // issuer/client_id/client_secret/audience block (auto-refreshing M2M).
 func TestAccM2MClientCredentials(t *testing.T) {
 	PreCheck(t)
+	t.Parallel()
 	org := NewOrg(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: ProtoV6ProviderFactories(),
@@ -30,6 +31,7 @@ resource "leifwind_project" "p" {
 // (sub = human user, email claim) — the LW-44 runner pattern.
 func TestAccDelegatedUserToken(t *testing.T) {
 	PreCheck(t)
+	t.Parallel()
 	org := NewOrg(t)
 	userTok := Stack().UserToken(t, org)
 	resource.Test(t, resource.TestCase{

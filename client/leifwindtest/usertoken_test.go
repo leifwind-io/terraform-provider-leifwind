@@ -5,7 +5,7 @@ package leifwindtest
 import "testing"
 
 func TestUserTokenIsDelegatedUserShaped(t *testing.T) {
-	s := Start(t)
+	s := sharedStack(t)
 	org := s.NewOrg(t)
 	tok := s.UserToken(t, org)
 	claims := DecodeClaims(t, tok)
@@ -24,7 +24,7 @@ func TestUserTokenIsDelegatedUserShaped(t *testing.T) {
 }
 
 func TestForgedTokenHasValidShape(t *testing.T) {
-	s := Start(t)
+	s := sharedStack(t)
 	org := s.NewOrg(t)
 	tok := s.ForgedToken(t, org)
 	claims := DecodeClaims(t, tok)

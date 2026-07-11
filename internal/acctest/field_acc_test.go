@@ -94,6 +94,7 @@ func plantKeeperField(t *testing.T, tok, resName string) resource.TestCheckFunc 
 
 func TestAccFieldLifecycleAndFragmentUpdate(t *testing.T) {
 	PreCheck(t)
+	t.Parallel()
 	org := NewOrg(t)
 	tok := org.Token(t, Stack())
 	resource.Test(t, resource.TestCase{
@@ -139,6 +140,7 @@ func TestAccFieldLifecycleAndFragmentUpdate(t *testing.T) {
 
 func TestAccFieldFragmentValidation(t *testing.T) {
 	PreCheck(t)
+	t.Parallel()
 	org := NewOrg(t)
 	tok := org.Token(t, Stack())
 	resource.Test(t, resource.TestCase{
