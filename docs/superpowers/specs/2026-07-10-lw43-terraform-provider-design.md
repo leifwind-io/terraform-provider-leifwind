@@ -121,10 +121,10 @@ Resources — server immutability maps to plan modifiers:
 |---|---|---|---|---|
 | `leifwind_project` | `id` (computed), `name` | `name` | — | `<project_id>` |
 | `leifwind_entity` | `id`, `project_id`, `name` | `project_id`, `name` | — | `<project_id>/<entity_id>` |
-| `leifwind_field` | `id`, `project_id`, `entity_id`, `name`, `data_type`, `connection_type`, `fragment_name` | all except `fragment_name` | `fragment_name` | `<project_id>/<entity_id>/<field_id>` |
+| `leifwind_field` | `id`, `project_id`, `entity_id`, `name`, `data_type`, `connection_type`, `fragment_name`, `key_field_ids` | all except `fragment_name`, `key_field_ids` | `fragment_name`, `key_field_ids` (config-only ordering hint, LW-86) | `<project_id>/<entity_id>/<field_id>` |
 
 - `data_type`/`connection_type` are flat string attributes with enum validators; client translates to/from the nested discriminated unions.
-- `ValidateConfig` on field: `fragment_name` required iff `connection_type == "FRAGMENT"`, forbidden otherwise (fail at plan time instead of the server silently nulling it).
+- `ValidateConfig` on field: `fragment_name` required iff `connection_type == "FRAGMENT"`, forbidden otherwise (fail at plan time instead of the server silently nulling it). `key_field_ids` follows the same shape rule (required-for-FRAGMENT / forbidden-for-KEY, config-only) — the reference to the entity's KEY field id(s) supplies the Terraform create/destroy ordering edge (backend enforces KEY-before-FRAGMENT); membership is validated at apply and the value is seeded from the server on import (LW-86).
 - **Strict Create** (deliberate deviation from raw upsert semantics): `Create` pre-checks existence by exact name (list + client-side match); if found → error "already exists — use terraform import". Rationale: Terraform's contract; silent adoption would let a later `destroy` delete infrastructure the config never created. Check-then-POST race accepted and documented. LW-44's adopt-then-diff uses explicit `import` blocks and is unaffected.
 - `Read`: GET by `object_id`; `errors.Is(err, ErrNotFound)` → `RemoveResource` (drift + cross-org 404 handling). `Delete`: relies on server-side cascade. Project/entity `Update` unreachable (all attrs RequiresReplace); field `Update` flows only `fragment_name`.
 - No `timeouts` blocks in v0.
