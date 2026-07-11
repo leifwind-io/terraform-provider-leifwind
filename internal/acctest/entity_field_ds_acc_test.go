@@ -8,25 +8,17 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-// TestAccEntityAndFieldDataSources deviates from the task-24 brief's literal
-// test config (owner-adjudicated, concrete named failure LW-70): the brief's
-// config declares a single FRAGMENT field ("body") as the only field of the
-// entity. Empirically (RED run) the backend 500s in sync_entity_schema when
-// the FIRST field ever created on an entity is a FRAGMENT field — the same
-// bug documented in field_acc_test.go's fieldConfig/plantKeeperField. This
-// test therefore:
-//  1. adds a KEY field "title", with "body" depends_on it (creation order);
-//  2. plants an out-of-band KEY "keeper" field after apply, so `terraform
-//     destroy` (which every resource.Test performs) doesn't hit the "last
-//     field of an entity" 500 either;
-//  3. adds pattern = "body" to the "leifwind_fields.all" data source so the
-//     brief's literal fields.# == 1 / fields.0.data_type == "TEXT" checks
-//     still hold deterministically even though the entity now has 2 (later
-//     3, once the keeper lands) fields — an unfiltered listing would
-//     otherwise return title too.
+// TestAccEntityAndFieldDataSources exercises the entity/field data sources
+// against an entity with one KEY field ("title") and one FRAGMENT field
+// ("f"). The FRAGMENT field references the KEY field via key_field_ids,
+// which both satisfies the field's create-time validation (Tasks 1-3) and
+// creates the Terraform graph edge that orders KEY-before-FRAGMENT on create
+// and FRAGMENT-before-KEY on destroy (both backend-enforced, LW-70; see
+// fieldConfig's comment in field_acc_test.go for the same pattern).
 //
-// All of the brief's original assertions are preserved byte-for-byte; only
-// the Terraform config and the "all" data source's pattern were adjusted.
+// pattern = "body" on the "leifwind_fields.all" data source isolates the
+// listing from the "title" KEY field so fields.# == 1 / fields.0.data_type
+// == "TEXT" hold deterministically.
 func TestAccEntityAndFieldDataSources(t *testing.T) {
 	PreCheck(t)
 	t.Parallel()
@@ -57,8 +49,7 @@ resource "leifwind_field" "f" {
   data_type       = "TEXT"
   connection_type = "FRAGMENT"
   fragment_name   = "content"
-
-  depends_on = [leifwind_field.title] # LW-70, see fieldConfig comment in field_acc_test.go
+  key_field_ids   = [leifwind_field.title.id]
 }
 
 data "leifwind_entity" "by_name" {
@@ -80,7 +71,7 @@ data "leifwind_field" "by_name" {
 data "leifwind_fields" "all" {
   project_id = leifwind_project.p.id
   entity_id  = leifwind_entity.e.id
-  pattern    = "body" # LW-70 deviation: isolates from the title KEY field / keeper, see doc comment above
+  pattern    = "body" # isolates from the title KEY field, see doc comment above
   depends_on = [leifwind_field.f]
 }
 `
@@ -95,7 +86,6 @@ data "leifwind_fields" "all" {
 				resource.TestCheckResourceAttr("data.leifwind_field.by_name", "connection_type", "FRAGMENT"),
 				resource.TestCheckResourceAttr("data.leifwind_fields.all", "fields.#", "1"),
 				resource.TestCheckResourceAttr("data.leifwind_fields.all", "fields.0.data_type", "TEXT"),
-				plantKeeperField(t, tok, "leifwind_field.title"), // LW-70 destroy-safety, see field_acc_test.go
 			),
 		}},
 	})
