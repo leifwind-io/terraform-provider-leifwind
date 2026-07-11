@@ -24,6 +24,13 @@ workflow:
 
 default:
   interruptible: true
+  # Shared SaaS runners intermittently fail to create the dind service
+  # container ("bad parameter: link is not supported") before any job script
+  # runs; retry infra-level failures automatically. Script failures still
+  # fail immediately.
+  retry:
+    max: 2
+    when: [runner_system_failure, stuck_or_timeout_failure]
 
 variables:
   GO_IMAGE: "golang:1.25"
@@ -44,7 +51,11 @@ lint:
   variables:
     GOLANGCI_LINT_CACHE: $CI_PROJECT_DIR/.golangci-cache
   cache:
+    # Distinct prefix: same key files as .go-cache but different paths — without
+    # it, this job and the Go jobs would overwrite each other's archives under
+    # the identical files-hash key (last writer wins, .golangci-cache lost).
     - key:
+        prefix: lint
         files: [go.sum, client/go.sum]
       paths: [.go-mod-cache, .go-build-cache, .golangci-cache]
   script:
