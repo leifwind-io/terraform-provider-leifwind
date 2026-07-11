@@ -29,6 +29,7 @@ resource "leifwind_project" "p" {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("leifwind_project.p", "id"),
 					resource.TestCheckResourceAttr("leifwind_project.p", "name", "acc_project"),
+					resource.TestCheckResourceAttrPair("leifwind_project.p", "unique_key", "leifwind_project.p", "name"),
 				),
 			},
 			{

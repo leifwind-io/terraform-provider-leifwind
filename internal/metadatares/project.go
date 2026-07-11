@@ -32,8 +32,9 @@ type projectResource struct {
 }
 
 type projectModel struct {
-	ID   types.String `tfsdk:"id"`
-	Name types.String `tfsdk:"name"`
+	ID        types.String `tfsdk:"id"`
+	Name      types.String `tfsdk:"name"`
+	UniqueKey types.String `tfsdk:"unique_key"`
 }
 
 func (r *projectResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -56,6 +57,13 @@ func (r *projectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Description: "Project name (unique per organization).",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"unique_key": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "Server-computed natural key (for projects: equals the name).",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 		},
@@ -108,6 +116,7 @@ func (r *projectResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 	plan.ID = types.StringValue(created.ObjectID.String())
+	plan.UniqueKey = types.StringValue(created.UniqueKey)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -132,6 +141,7 @@ func (r *projectResource) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 	state.Name = types.StringValue(p.Name)
+	state.UniqueKey = types.StringValue(p.UniqueKey)
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
