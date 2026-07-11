@@ -89,6 +89,48 @@ func (s *MetadataService) IterEntities(ctx context.Context, projectID uuid.UUID,
 	})
 }
 
+// UpsertField creates or adopts a field. Only Connection.FragmentName is
+// mutable on an existing field; data_type/connection_type changes → ErrValidation.
+func (s *MetadataService) UpsertField(ctx context.Context, f MetadataField, opts ...WriteOption) (MetadataField, error) {
+	var out MetadataField
+	err := s.c.do(ctx, "POST",
+		"/metadata/projects/"+f.ProjectID.String()+"/entities/"+f.EntityID.String()+"/fields",
+		writeValues(opts), f, &out)
+	return out, err
+}
+
+// GetField fetches one field.
+func (s *MetadataService) GetField(ctx context.Context, projectID, entityID, fieldID uuid.UUID) (MetadataField, error) {
+	var out MetadataField
+	err := s.c.do(ctx, "GET",
+		"/metadata/projects/"+projectID.String()+"/entities/"+entityID.String()+"/fields/"+fieldID.String(),
+		nil, nil, &out)
+	return out, err
+}
+
+// DeleteField deletes a field (drops the backing column server-side).
+func (s *MetadataService) DeleteField(ctx context.Context, projectID, entityID, fieldID uuid.UUID, opts ...WriteOption) error {
+	var out struct {
+		Detail string `json:"detail"`
+	}
+	return s.c.do(ctx, "DELETE",
+		"/metadata/projects/"+projectID.String()+"/entities/"+entityID.String()+"/fields/"+fieldID.String(),
+		writeValues(opts), nil, &out)
+}
+
+// ListFields returns one page of an entity's fields (404 for bogus entities).
+func (s *MetadataService) ListFields(ctx context.Context, projectID, entityID uuid.UUID, opts ListOpts) (Page[MetadataField], error) {
+	return listPage[MetadataField](ctx, s.c,
+		"/metadata/projects/"+projectID.String()+"/entities/"+entityID.String()+"/fields", opts)
+}
+
+// IterFields auto-pages through an entity's fields.
+func (s *MetadataService) IterFields(ctx context.Context, projectID, entityID uuid.UUID, opts ListOpts) iter.Seq2[MetadataField, error] {
+	return iterPages(ctx, opts, func(ctx context.Context, o ListOpts) (Page[MetadataField], error) {
+		return s.ListFields(ctx, projectID, entityID, o)
+	})
+}
+
 func listPage[T any](ctx context.Context, c *Client, path string, opts ListOpts) (Page[T], error) {
 	var out Page[T]
 	err := c.do(ctx, "GET", path, opts.values(), nil, &out)
