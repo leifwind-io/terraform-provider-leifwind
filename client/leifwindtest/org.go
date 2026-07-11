@@ -65,12 +65,24 @@ func (s *Stack) NewOrg(t testing.TB) *Org {
 		t.Fatalf("grant project: %v", err)
 	}
 
-	return &Org{
+	org := &Org{
 		ID:            created.OrganizationID,
 		MachineUserID: user.UserID,
 		ClientID:      secret.ClientID,
 		ClientSecret:  secret.ClientSecret,
 	}
+
+	// Pre-warm the secret projection before handing the org out: mint (and
+	// discard) one token via Token, which polls ZITADEL's projection-lag 400
+	// ("Errors.User.Machine.Secret.NotExisting"). Consumers that fetch tokens
+	// through client.ClientCredentials (Org.TokenSource, the provider's M2M
+	// config) correctly have no retry-on-400 of their own, so the secret must
+	// be live by the time NewOrg returns. Seen on the main pipeline (merge
+	// 462ee60): TestDeleteProjectAndDryRun failed via the TokenSource path
+	// under a CPU-starved shared runner.
+	_ = org.Token(t, s)
+
+	return org
 }
 
 // TokenSource returns an auto-refreshing client_credentials TokenSource
