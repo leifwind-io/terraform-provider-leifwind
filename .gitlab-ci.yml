@@ -53,3 +53,30 @@ test:acceptance:
     - TF_ACC=1 TF_ACC_PROVIDER_HOST=registry.opentofu.org
       TF_ACC_TERRAFORM_PATH=/usr/local/bin/tofu
       go test ./internal/acctest/... -v -timeout 45m
+
+release-dry-run:
+  stage: release
+  image: $GO_IMAGE
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+  script:
+    - curl -fsSL https://github.com/goreleaser/goreleaser/releases/latest/download/goreleaser_Linux_x86_64.tar.gz | tar -xz -C /usr/local/bin goreleaser
+    - goreleaser check
+    # NOTE: runs WITH go.work until client/v0.1.0 exists (LW-68 proves GOWORK=off)
+    - goreleaser release --snapshot --skip=sign,publish --clean
+
+release:
+  stage: release
+  image: $GO_IMAGE
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
+  needs: [lint, "test:client", "test:acceptance"]
+  script:
+    - apt-get update -qq && apt-get install -y -qq gnupg git
+    - curl -fsSL https://github.com/goreleaser/goreleaser/releases/latest/download/goreleaser_Linux_x86_64.tar.gz | tar -xz -C /usr/local/bin goreleaser
+    - echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+    # the tag must be on GitHub BEFORE goreleaser creates the release
+    - git remote add github "https://oauth2:${GITHUB_MIRROR_TOKEN}@github.com/leifwind-io/terraform-provider-leifwind.git" || true
+    - git push github "$CI_COMMIT_TAG"
+    - GOWORK=off GITHUB_TOKEN="$GITHUB_MIRROR_TOKEN" goreleaser release --clean
