@@ -286,16 +286,14 @@ func (r *fieldResource) modelFromClient(f client.MetadataField, m *fieldModel) {
 // exist by the time this runs.
 func (r *fieldResource) validateKeyFieldMembership(ctx context.Context, plan fieldModel, f client.MetadataField, diags *diag.Diagnostics) {
 	supplied := setToStrings(plan.KeyFieldIDs)
-	if f.Connection.Type != client.ConnectionFragment {
-		if len(supplied) > 0 {
-			diags.AddAttributeError(path.Root("key_field_ids"), "Invalid key_field_ids",
-				fmt.Sprintf("key_field_ids must not be set when connection_type is %q", f.Connection.Type))
-		}
+	// Shape rule — same predicate as plan-time ValidateConfig
+	// (validateKeyFieldIDsCombination), but with apply-time filtered emptiness so
+	// a set that resolved to only null/unknown elements counts as empty.
+	if msg := validateKeyFieldIDsCombination(string(f.Connection.Type), len(supplied) > 0, len(supplied) == 0); msg != "" {
+		diags.AddAttributeError(path.Root("key_field_ids"), "Invalid key_field_ids", msg)
 		return
 	}
-	if len(supplied) == 0 {
-		diags.AddAttributeError(path.Root("key_field_ids"), "Invalid key_field_ids",
-			"key_field_ids is required when connection_type is \"FRAGMENT\" (reference the entity's KEY field ids)")
+	if f.Connection.Type != client.ConnectionFragment {
 		return
 	}
 	fields, err := lookup.EntityFields(ctx, r.c, f.ProjectID, f.EntityID)
@@ -385,9 +383,12 @@ func (r *fieldResource) Read(ctx context.Context, req resource.ReadRequest, resp
 }
 
 func (r *fieldResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	// only fragment_name reaches Update (everything else RequiresReplace)
-	var plan fieldModel
+	// Only fragment_name and key_field_ids reach Update (everything else
+	// RequiresReplace); key_field_ids is config-only, so the only server work is
+	// the fragment_name upsert.
+	var plan, state fieldModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -396,9 +397,13 @@ func (r *fieldResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		resp.Diagnostics.AddError("Invalid field configuration", err.Error())
 		return
 	}
-	r.validateKeyFieldMembership(ctx, plan, f, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
+	// Re-validate membership only when key_field_ids actually changed — a
+	// fragment_name-only update needs no entity-field list.
+	if !plan.KeyFieldIDs.Equal(state.KeyFieldIDs) {
+		r.validateKeyFieldMembership(ctx, plan, f, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 	}
 
 	updated, err := r.c.Metadata.UpsertField(ctx, f)

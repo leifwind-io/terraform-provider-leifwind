@@ -87,6 +87,21 @@ func TestAccFieldLifecycleAndFragmentUpdate(t *testing.T) {
 				},
 				ImportStateVerify: true,
 			},
+			{
+				// KEY-field import round-trip: ImportState must leave
+				// key_field_ids unset for a KEY field (the FRAGMENT-only seed
+				// guard); a regression that seeded a KEY would fail this verify.
+				ResourceName: "leifwind_field.title",
+				ImportState:  true,
+				ImportStateIdFunc: func(s *terraform.State) (string, error) {
+					rs := s.RootModule().Resources["leifwind_field.title"]
+					return fmt.Sprintf("%s/%s/%s",
+						rs.Primary.Attributes["project_id"],
+						rs.Primary.Attributes["entity_id"],
+						rs.Primary.ID), nil
+				},
+				ImportStateVerify: true,
+			},
 		},
 	})
 }
