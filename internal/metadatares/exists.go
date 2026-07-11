@@ -5,6 +5,8 @@ package metadatares
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	"gitlab.com/leifwind/stream/terraform-provider-leifwind/client"
 )
 
@@ -17,6 +19,19 @@ func findProjectByName(ctx context.Context, c *client.Client, name string) (*cli
 		}
 		if p.Name == name {
 			return &p, nil
+		}
+	}
+	return nil, nil
+}
+
+// findEntityByName resolves an entity by EXACT name within a project.
+func findEntityByName(ctx context.Context, c *client.Client, projectID uuid.UUID, name string) (*client.MetadataEntity, error) {
+	for e, err := range c.Metadata.IterEntities(ctx, projectID, client.ListOpts{Pattern: name}) {
+		if err != nil {
+			return nil, err
+		}
+		if e.Name == name {
+			return &e, nil
 		}
 	}
 	return nil, nil

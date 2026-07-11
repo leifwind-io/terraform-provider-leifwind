@@ -125,6 +125,7 @@ func (p *leifwindProvider) Configure(ctx context.Context, req provider.Configure
 func (p *leifwindProvider) Resources(context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		metadatares.NewProjectResource,
+		metadatares.NewEntityResource,
 	}
 }
 
