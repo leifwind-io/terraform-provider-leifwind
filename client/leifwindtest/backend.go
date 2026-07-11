@@ -68,6 +68,10 @@ func (s *Stack) startBackend(withToxiproxy bool) error {
 	}
 	s.BackendURL = fmt.Sprintf("http://%s:%s", host, port.Port())
 
-	_ = withToxiproxy // Task 17
+	if withToxiproxy {
+		if err := s.startToxiproxy(); err != nil {
+			return err
+		}
+	}
 	return nil
 }

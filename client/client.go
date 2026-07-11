@@ -83,9 +83,9 @@ func New(endpoint string, opts ...Option) (*Client, error) {
 	return c, nil
 }
 
-// do performs one request (retry wrapping added in the retry task).
+// do performs one request, routed through the retry loop (see retry.go).
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, body, out any) error {
-	return c.doOnce(ctx, method, path, query, body, out)
+	return c.doRetry(ctx, method, path, query, body, out)
 }
 
 func (c *Client) doOnce(ctx context.Context, method, path string, query url.Values, body, out any) error {

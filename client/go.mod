@@ -3,6 +3,7 @@ module gitlab.com/leifwind/stream/terraform-provider-leifwind/client
 go 1.25.0
 
 require (
+	github.com/Shopify/toxiproxy/v2 v2.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/moby/moby/api v1.54.2
