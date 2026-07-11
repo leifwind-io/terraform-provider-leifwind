@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"gitlab.com/leifwind/stream/terraform-provider-leifwind/client"
+	"gitlab.com/leifwind/stream/terraform-provider-leifwind/internal/metadatares"
 )
 
 var _ provider.Provider = (*leifwindProvider)(nil)
@@ -123,7 +124,7 @@ func (p *leifwindProvider) Configure(ctx context.Context, req provider.Configure
 
 func (p *leifwindProvider) Resources(context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
-		// appended by resource tasks
+		metadatares.NewProjectResource,
 	}
 }
 
