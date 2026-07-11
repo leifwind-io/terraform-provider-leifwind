@@ -36,3 +36,16 @@ func findEntityByName(ctx context.Context, c *client.Client, projectID uuid.UUID
 	}
 	return nil, nil
 }
+
+// findFieldByName resolves a field by EXACT name within an entity.
+func findFieldByName(ctx context.Context, c *client.Client, projectID, entityID uuid.UUID, name string) (*client.MetadataField, error) {
+	for f, err := range c.Metadata.IterFields(ctx, projectID, entityID, client.ListOpts{Pattern: name}) {
+		if err != nil {
+			return nil, err
+		}
+		if f.Name == name {
+			return &f, nil
+		}
+	}
+	return nil, nil
+}
