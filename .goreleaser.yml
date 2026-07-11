@@ -46,6 +46,9 @@ signs:
       - "${artifact}"
 
 release:
+  github:
+    owner: leifwind-io
+    name: terraform-provider-leifwind
   extra_files:
     - glob: "terraform-registry-manifest.json"
       name_template: "{{ .ProjectName }}_{{ .Version }}_manifest.json"

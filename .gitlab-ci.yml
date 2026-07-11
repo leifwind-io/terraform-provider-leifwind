@@ -61,7 +61,7 @@ release-dry-run:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == "main"
   script:
-    - curl -fsSL https://github.com/goreleaser/goreleaser/releases/latest/download/goreleaser_Linux_x86_64.tar.gz | tar -xz -C /usr/local/bin goreleaser
+    - curl -fsSL https://github.com/goreleaser/goreleaser/releases/download/v2.15.4/goreleaser_Linux_x86_64.tar.gz | tar -xz -C /usr/local/bin goreleaser
     - goreleaser check
     # NOTE: runs WITH go.work until client/v0.1.0 exists (LW-68 proves GOWORK=off)
     - goreleaser release --snapshot --skip=sign,publish --clean
@@ -72,9 +72,11 @@ release:
   rules:
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
   needs: [lint, "test:client", "test:acceptance"]
+  variables:
+    GIT_DEPTH: "0"
   script:
     - apt-get update -qq && apt-get install -y -qq gnupg git
-    - curl -fsSL https://github.com/goreleaser/goreleaser/releases/latest/download/goreleaser_Linux_x86_64.tar.gz | tar -xz -C /usr/local/bin goreleaser
+    - curl -fsSL https://github.com/goreleaser/goreleaser/releases/download/v2.15.4/goreleaser_Linux_x86_64.tar.gz | tar -xz -C /usr/local/bin goreleaser
     - echo "$GPG_PRIVATE_KEY" | gpg --batch --import
     # the tag must be on GitHub BEFORE goreleaser creates the release
     - git remote add github "https://oauth2:${GITHUB_MIRROR_TOKEN}@github.com/leifwind-io/terraform-provider-leifwind.git" || true
