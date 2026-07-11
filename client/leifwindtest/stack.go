@@ -36,6 +36,12 @@ type stackSettings struct {
 // StackOption configures Start/StartMain.
 type StackOption func(*stackSettings)
 
+// WithToxiproxy routes ProxiedBackendURL through a toxiproxy container
+// (fault injection; fully wired in the retry task).
+func WithToxiproxy() StackOption {
+	return func(s *stackSettings) { s.toxiproxy = true }
+}
+
 // Stack is a running leifwind stack.
 type Stack struct {
 	Issuer            string // ZITADEL external URL (token iss)
