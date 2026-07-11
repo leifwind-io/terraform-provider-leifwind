@@ -109,7 +109,11 @@ func (d *projectDataSource) Read(ctx context.Context, req datasource.ReadRequest
 		}
 		p = got
 	}
-	cfg.ID = types.StringValue(p.ObjectID.String())
+	// keep the config value for id when set: server lowercases UUIDs and
+	// these are immutable inputs (populate only on the by-name path)
+	if cfg.ID.IsNull() {
+		cfg.ID = types.StringValue(p.ObjectID.String())
+	}
 	cfg.Name = types.StringValue(p.Name)
 	cfg.UniqueKey = types.StringValue(p.UniqueKey)
 	resp.Diagnostics.Append(resp.State.Set(ctx, cfg)...)
