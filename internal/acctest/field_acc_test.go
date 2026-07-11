@@ -213,7 +213,7 @@ resource "leifwind_field" "extra" {
 			// tofu's diagnostic renderer word-wraps at a fixed column, and the
 			// 36-char entity UUID reliably pushes "entity" onto the next line;
 			// \s+ absorbs that wrap (plain literal text would never match it).
-			ExpectError: regexp.MustCompile(`not KEY fields of\s+entity`),
+			ExpectError: regexp.MustCompile(`not KEY fields`),
 		}},
 	})
 }

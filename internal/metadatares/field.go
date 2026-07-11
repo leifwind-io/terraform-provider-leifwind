@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -78,7 +79,7 @@ func validateKeyFieldIDsCombination(connectionType string, keyFieldsSet, keyFiel
 }
 
 // setToStrings extracts the known string elements of a set (ignoring null /
-// unknown elements). Used for both apply-time validation and the wire path.
+// unknown elements).
 func setToStrings(s types.Set) []string {
 	elems := s.Elements()
 	out := make([]string, 0, len(elems))
@@ -100,6 +101,18 @@ func missingKeyFieldIDs(supplied []string, keyIDs map[string]struct{}) []string 
 		}
 	}
 	return missing
+}
+
+// keyFieldIDStrings returns the object ids (as strings) of the KEY fields in
+// fields, skipping any with a nil ObjectID.
+func keyFieldIDStrings(fields []client.MetadataField) []string {
+	var out []string
+	for _, ef := range fields {
+		if ef.Connection.Type == client.ConnectionKey && ef.ObjectID != nil {
+			out = append(out, ef.ObjectID.String())
+		}
+	}
+	return out
 }
 
 func (r *fieldResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -179,17 +192,28 @@ func (r *fieldResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 func (r *fieldResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	var cfg fieldModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &cfg)...)
-	if resp.Diagnostics.HasError() || cfg.ConnectionType.IsUnknown() ||
-		cfg.FragmentName.IsUnknown() || cfg.KeyFieldIDs.IsUnknown() {
+	if resp.Diagnostics.HasError() || cfg.ConnectionType.IsUnknown() {
 		return
 	}
-	if msg := validateFieldCombination(cfg.ConnectionType.ValueString(),
-		cfg.FragmentName.ValueString(), !cfg.FragmentName.IsNull()); msg != "" {
-		resp.Diagnostics.AddAttributeError(path.Root("fragment_name"), "Invalid field configuration", msg)
+	if !cfg.FragmentName.IsUnknown() {
+		if msg := validateFieldCombination(cfg.ConnectionType.ValueString(),
+			cfg.FragmentName.ValueString(), !cfg.FragmentName.IsNull()); msg != "" {
+			resp.Diagnostics.AddAttributeError(path.Root("fragment_name"), "Invalid field configuration", msg)
+		}
 	}
-	if msg := validateKeyFieldIDsCombination(cfg.ConnectionType.ValueString(),
-		!cfg.KeyFieldIDs.IsNull(), len(cfg.KeyFieldIDs.Elements()) == 0); msg != "" {
-		resp.Diagnostics.AddAttributeError(path.Root("key_field_ids"), "Invalid field configuration", msg)
+	if !cfg.KeyFieldIDs.IsUnknown() {
+		// NOTE: deliberately Elements() here, not setToStrings(cfg.KeyFieldIDs).
+		// A known set can still contain an individually-unknown element (e.g.
+		// key_field_ids = [leifwind_field.title.id] before title is created);
+		// setToStrings filters that element out and would misreport the set as
+		// empty, producing a spurious "required" error on first apply. Raw
+		// element count treats "present but unresolved" as present; the real
+		// membership/emptiness check happens at apply time in
+		// validateKeyFieldMembership once every id is resolved.
+		if msg := validateKeyFieldIDsCombination(cfg.ConnectionType.ValueString(),
+			!cfg.KeyFieldIDs.IsNull(), len(cfg.KeyFieldIDs.Elements()) == 0); msg != "" {
+			resp.Diagnostics.AddAttributeError(path.Root("key_field_ids"), "Invalid field configuration", msg)
+		}
 	}
 }
 
@@ -250,34 +274,39 @@ func (r *fieldResource) modelFromClient(f client.MetadataField, m *fieldModel) {
 	m.UniqueKey = types.StringValue(f.UniqueKey)
 }
 
-// validateKeyFieldMembership verifies the FRAGMENT field's key_field_ids all
-// reference existing KEY fields of the same entity. No-op for KEY fields
-// (beyond rejecting a stray value). The graph edge guarantees the referenced
-// KEY fields already exist by the time Create/Update runs, so a bad id here
-// means a genuine mistake — surface it as a clear diagnostic rather than a
-// downstream backend 422.
-func (r *fieldResource) validateKeyFieldMembership(ctx context.Context, plan fieldModel, f client.MetadataField) error {
+// validateKeyFieldMembership enforces the key_field_ids rules at apply time,
+// appending diagnostics. FRAGMENT fields must reference a non-empty set, and
+// every referenced id must be a KEY field of the same entity; KEY fields must
+// not set it. A lookup failure is surfaced as a plain error (not attributed to
+// key_field_ids). The graph edge guarantees the referenced KEY fields already
+// exist by the time this runs.
+func (r *fieldResource) validateKeyFieldMembership(ctx context.Context, plan fieldModel, f client.MetadataField, diags *diag.Diagnostics) {
 	supplied := setToStrings(plan.KeyFieldIDs)
 	if f.Connection.Type != client.ConnectionFragment {
 		if len(supplied) > 0 {
-			return fmt.Errorf("key_field_ids must not be set when connection_type is %q", f.Connection.Type)
+			diags.AddAttributeError(path.Root("key_field_ids"), "Invalid key_field_ids",
+				fmt.Sprintf("key_field_ids must not be set when connection_type is %q", f.Connection.Type))
 		}
-		return nil
+		return
+	}
+	if len(supplied) == 0 {
+		diags.AddAttributeError(path.Root("key_field_ids"), "Invalid key_field_ids",
+			"key_field_ids is required when connection_type is \"FRAGMENT\" (reference the entity's KEY field ids)")
+		return
 	}
 	fields, err := lookup.EntityFields(ctx, r.c, f.ProjectID, f.EntityID)
 	if err != nil {
-		return err
+		diags.AddError("Listing entity fields failed", err.Error())
+		return
 	}
 	keyIDs := make(map[string]struct{})
-	for _, ef := range fields {
-		if ef.Connection.Type == client.ConnectionKey && ef.ObjectID != nil {
-			keyIDs[ef.ObjectID.String()] = struct{}{}
-		}
+	for _, id := range keyFieldIDStrings(fields) {
+		keyIDs[id] = struct{}{}
 	}
 	if missing := missingKeyFieldIDs(supplied, keyIDs); len(missing) > 0 {
-		return fmt.Errorf("key_field_ids: %v are not KEY fields of entity %s (reference the entity's KEY field ids)", missing, f.EntityID)
+		diags.AddAttributeError(path.Root("key_field_ids"), "Invalid key_field_ids",
+			fmt.Sprintf("key_field_ids: %v are not KEY fields of entity %s (reference the entity's KEY field ids)", missing, f.EntityID))
 	}
-	return nil
 }
 
 func (r *fieldResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -313,8 +342,8 @@ func (r *fieldResource) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	if err := r.validateKeyFieldMembership(ctx, plan, f); err != nil {
-		resp.Diagnostics.AddAttributeError(path.Root("key_field_ids"), "Invalid key_field_ids", err.Error())
+	r.validateKeyFieldMembership(ctx, plan, f, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
@@ -363,8 +392,8 @@ func (r *fieldResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		resp.Diagnostics.AddError("Invalid field configuration", err.Error())
 		return
 	}
-	if err := r.validateKeyFieldMembership(ctx, plan, f); err != nil {
-		resp.Diagnostics.AddAttributeError(path.Root("key_field_ids"), "Invalid key_field_ids", err.Error())
+	r.validateKeyFieldMembership(ctx, plan, f, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
@@ -416,14 +445,10 @@ func (r *fieldResource) ImportState(ctx context.Context, req resource.ImportStat
 		return
 	}
 	var self *client.MetadataField
-	keyElems := make([]attr.Value, 0, len(fields))
 	for i := range fields {
-		ef := fields[i]
-		if ef.ObjectID != nil && *ef.ObjectID == ids[2] {
+		if fields[i].ObjectID != nil && *fields[i].ObjectID == ids[2] {
 			self = &fields[i]
-		}
-		if ef.Connection.Type == client.ConnectionKey && ef.ObjectID != nil {
-			keyElems = append(keyElems, types.StringValue(ef.ObjectID.String()))
+			break
 		}
 	}
 	if self == nil {
@@ -432,6 +457,11 @@ func (r *fieldResource) ImportState(ctx context.Context, req resource.ImportStat
 		return
 	}
 	if self.Connection.Type == client.ConnectionFragment {
+		keyStrs := keyFieldIDStrings(fields)
+		keyElems := make([]attr.Value, 0, len(keyStrs))
+		for _, id := range keyStrs {
+			keyElems = append(keyElems, types.StringValue(id))
+		}
 		set, d := types.SetValue(types.StringType, keyElems)
 		resp.Diagnostics.Append(d...)
 		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("key_field_ids"), set)...)
