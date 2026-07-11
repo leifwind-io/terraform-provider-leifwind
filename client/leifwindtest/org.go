@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"gitlab.com/leifwind/stream/terraform-provider-leifwind/client"
@@ -80,6 +81,11 @@ func (o *Org) TokenSource(s *Stack) client.TokenSource {
 }
 
 // Token fetches one raw machine access token (client_credentials).
+//
+// ZITADEL's token endpoint reads the machine secret through an eventually
+// consistent projection: immediately after NewOrg it can briefly answer
+// 400 "Errors.User.Machine.Secret.NotExisting" (seen under CPU-starved CI
+// runners), so poll that specific error until the secret lands.
 func (o *Org) Token(t testing.TB, s *Stack) string {
 	t.Helper()
 	form := url.Values{
@@ -90,11 +96,21 @@ func (o *Org) Token(t testing.TB, s *Stack) string {
 			"urn:zitadel:iam:org:project:id:" + s.Audience + ":aud",
 		}, " ")},
 	}
-	tok, status, err := fetchToken(s.Issuer, o.ClientID, o.ClientSecret, form)
-	if err != nil || status != 200 {
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		tok, status, err := fetchToken(s.Issuer, o.ClientID, o.ClientSecret, form)
+		if err == nil && status == http.StatusOK {
+			return tok
+		}
+		if status == http.StatusBadRequest && err != nil &&
+			strings.Contains(err.Error(), "Errors.User.Machine.Secret.NotExisting") &&
+			time.Now().Before(deadline) {
+			time.Sleep(250 * time.Millisecond)
+			continue
+		}
 		t.Fatalf("token fetch: status=%d err=%v", status, err)
+		return "" // unreachable (t.Fatalf on testing.T panics/exits); keeps vet happy for testing.TB
 	}
-	return tok
 }
 
 func fetchToken(issuer, clientID, clientSecret string, form url.Values) (string, int, error) {
