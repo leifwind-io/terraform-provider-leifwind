@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
-package metadatares
+// Package lookup provides shared exact-name-resolution helpers for the
+// metadata resources and data sources. The backend's list endpoints only
+// support substring ("ILIKE") pattern matching, so exact-name lookups
+// filter client-side.
+package lookup
 
 import (
 	"context"
@@ -10,9 +14,9 @@ import (
 	"gitlab.com/leifwind/stream/terraform-provider-leifwind/client"
 )
 
-// findProjectByName resolves a project by EXACT name (the server pattern
+// ProjectByName resolves a project by EXACT name (the server pattern
 // is a substring match, so filter client-side). nil = not found.
-func findProjectByName(ctx context.Context, c *client.Client, name string) (*client.MetadataProject, error) {
+func ProjectByName(ctx context.Context, c *client.Client, name string) (*client.MetadataProject, error) {
 	for p, err := range c.Metadata.IterProjects(ctx, client.ListOpts{Pattern: name}) {
 		if err != nil {
 			return nil, err
@@ -24,8 +28,8 @@ func findProjectByName(ctx context.Context, c *client.Client, name string) (*cli
 	return nil, nil
 }
 
-// findEntityByName resolves an entity by EXACT name within a project.
-func findEntityByName(ctx context.Context, c *client.Client, projectID uuid.UUID, name string) (*client.MetadataEntity, error) {
+// EntityByName resolves an entity by EXACT name within a project.
+func EntityByName(ctx context.Context, c *client.Client, projectID uuid.UUID, name string) (*client.MetadataEntity, error) {
 	for e, err := range c.Metadata.IterEntities(ctx, projectID, client.ListOpts{Pattern: name}) {
 		if err != nil {
 			return nil, err
@@ -37,8 +41,8 @@ func findEntityByName(ctx context.Context, c *client.Client, projectID uuid.UUID
 	return nil, nil
 }
 
-// findFieldByName resolves a field by EXACT name within an entity.
-func findFieldByName(ctx context.Context, c *client.Client, projectID, entityID uuid.UUID, name string) (*client.MetadataField, error) {
+// FieldByName resolves a field by EXACT name within an entity.
+func FieldByName(ctx context.Context, c *client.Client, projectID, entityID uuid.UUID, name string) (*client.MetadataField, error) {
 	for f, err := range c.Metadata.IterFields(ctx, projectID, entityID, client.ListOpts{Pattern: name}) {
 		if err != nil {
 			return nil, err

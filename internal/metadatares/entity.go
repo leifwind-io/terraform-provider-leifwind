@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"gitlab.com/leifwind/stream/terraform-provider-leifwind/client"
+	"gitlab.com/leifwind/stream/terraform-provider-leifwind/internal/lookup"
 )
 
 var (
@@ -105,7 +106,7 @@ func (r *entityResource) Create(ctx context.Context, req resource.CreateRequest,
 
 	// strict create: the backend POST is create-or-adopt; Terraform's
 	// contract is that Create fails on pre-existing objects.
-	existing, err := findEntityByName(ctx, r.c, pid, name)
+	existing, err := lookup.EntityByName(ctx, r.c, pid, name)
 	if err != nil {
 		resp.Diagnostics.AddError("Checking for existing entity failed", err.Error())
 		return

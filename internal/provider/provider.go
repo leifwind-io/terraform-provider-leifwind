@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"gitlab.com/leifwind/stream/terraform-provider-leifwind/client"
+	"gitlab.com/leifwind/stream/terraform-provider-leifwind/internal/metadatads"
 	"gitlab.com/leifwind/stream/terraform-provider-leifwind/internal/metadatares"
 )
 
@@ -132,6 +133,7 @@ func (p *leifwindProvider) Resources(context.Context) []func() resource.Resource
 
 func (p *leifwindProvider) DataSources(context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
-		// appended by data-source tasks
+		metadatads.NewProjectDataSource,
+		metadatads.NewProjectsDataSource,
 	}
 }

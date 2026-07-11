@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"gitlab.com/leifwind/stream/terraform-provider-leifwind/client"
+	"gitlab.com/leifwind/stream/terraform-provider-leifwind/internal/lookup"
 )
 
 var (
@@ -92,7 +93,7 @@ func (r *projectResource) Create(ctx context.Context, req resource.CreateRequest
 
 	// strict create: the backend POST is create-or-adopt; Terraform's
 	// contract is that Create fails on pre-existing objects.
-	existing, err := findProjectByName(ctx, r.c, name)
+	existing, err := lookup.ProjectByName(ctx, r.c, name)
 	if err != nil {
 		resp.Diagnostics.AddError("Checking for existing project failed", err.Error())
 		return
