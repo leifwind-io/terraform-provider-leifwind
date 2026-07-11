@@ -18,6 +18,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/leifwind-io/leifwind-go"
+	"github.com/leifwind-io/terraform-provider-leifwind/internal/lookup"
 )
 
 var (
@@ -199,7 +200,7 @@ func (r *fieldResource) Create(ctx context.Context, req resource.CreateRequest, 
 
 	// strict create: the backend POST is create-or-adopt; Terraform's
 	// contract is that Create fails on pre-existing objects.
-	existing, err := findFieldByName(ctx, r.c, f.ProjectID, f.EntityID, f.Name)
+	existing, err := lookup.FieldByName(ctx, r.c, f.ProjectID, f.EntityID, f.Name)
 	if err != nil {
 		resp.Diagnostics.AddError("Checking for existing field failed", err.Error())
 		return
