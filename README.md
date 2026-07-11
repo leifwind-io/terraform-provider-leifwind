@@ -75,11 +75,11 @@ Complete attribute reference: [`docs/index.md`](docs/index.md).
   schema and schema names are database-global. Namespace project names per
   organization to avoid collisions. See
   [`docs/resources/project.md`](docs/resources/project.md).
-- **Deleting the last field of an entity currently 500s** in the backend's
-  `sync_entity_schema` (LW-70). Until the backend fix ships, keep at least
-  one field un-managed by your configuration on each entity, or destroy the
-  owning `leifwind_entity` instead of deleting every one of its fields
-  individually. See [`docs/resources/field.md`](docs/resources/field.md).
+- **FRAGMENT fields require a sibling KEY field** on the entity, enforced by
+  the backend. Set `key_field_ids` on each FRAGMENT `leifwind_field` to the
+  entity's KEY field id(s) so Terraform creates the KEY first and destroys it
+  last — no manual `depends_on`. See
+  [`docs/resources/field.md`](docs/resources/field.md).
 
 ## Development
 

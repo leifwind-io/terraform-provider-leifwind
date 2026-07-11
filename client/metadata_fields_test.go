@@ -82,9 +82,9 @@ func TestFieldLifecycleKeyAndFragment(t *testing.T) {
 		t.Fatalf("list: %d, %v", len(page.Objects), err)
 	}
 
-	// LW-70 also 500s when a delete would leave the entity with zero fields
-	// (sync_entity_schema: "no fields provided to get_table_structure"), so
-	// keep one KEY field alive while both delete paths are exercised below.
+	// The backend enforces KEY-before-FRAGMENT (LW-70): the entity's last KEY
+	// field can't be deleted while a FRAGMENT sibling exists. Add a second KEY
+	// field so the KEY delete below isn't the entity's last.
 	if _, err := c.Metadata.UpsertField(ctx, client.MetadataField{
 		ProjectID: pid, EntityID: eid, Name: "author",
 		Config:     client.FieldConfig{DataType: client.DataTypeText},
@@ -93,8 +93,8 @@ func TestFieldLifecycleKeyAndFragment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Delete FRAGMENT before KEY: deleting a KEY field while a FRAGMENT
-	// sibling exists 500s on backend:edge (LW-70).
+	// Delete FRAGMENT before KEY: deleting the entity's last KEY field while a
+	// FRAGMENT sibling exists is rejected (422) by the backend (LW-70).
 	if err := c.Metadata.DeleteField(ctx, pid, eid, *frag.ObjectID); err != nil {
 		t.Fatal(err)
 	}
