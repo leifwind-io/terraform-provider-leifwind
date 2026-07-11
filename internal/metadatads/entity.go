@@ -117,7 +117,8 @@ func (d *entityDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		e = got
 	}
 	cfg.ID = types.StringValue(e.ObjectID.String())
-	cfg.ProjectID = types.StringValue(e.ProjectID.String())
+	// keep the config/state value for project_id: server lowercases UUIDs
+	// and these are immutable inputs
 	cfg.Name = types.StringValue(e.Name)
 	cfg.UniqueKey = types.StringValue(e.UniqueKey)
 	resp.Diagnostics.Append(resp.State.Set(ctx, cfg)...)

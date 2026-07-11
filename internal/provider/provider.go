@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -82,6 +83,29 @@ func (p *leifwindProvider) Schema(_ context.Context, _ provider.SchemaRequest, r
 func (p *leifwindProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
 	var model providerModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &model)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	// Unknown (known-after-apply) values would surface as pointer-to-""
+	// below, producing misleading "required" errors or silent env fallback.
+	for _, a := range []struct {
+		name string
+		v    types.String
+	}{
+		{"endpoint", model.Endpoint},
+		{"token", model.Token},
+		{"issuer", model.Issuer},
+		{"client_id", model.ClientID},
+		{"client_secret", model.ClientSecret},
+		{"audience", model.Audience},
+	} {
+		if a.v.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(path.Root(a.name),
+				"Unknown provider configuration value",
+				"The provider cannot be configured until this value is known. "+
+					"Apply the resource that supplies it first, or set it via its LEIFWIND_* environment variable.")
+		}
+	}
 	if resp.Diagnostics.HasError() {
 		return
 	}

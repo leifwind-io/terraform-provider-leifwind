@@ -102,9 +102,11 @@ use (
 )
 ```
 
-Release builds run with `GOWORK=off` so the provider's `go.mod` pin against a
-**released** `client/vX.Y.Z` tag is what actually gets built and shipped
-(see Release, below).
+Release builds run with `GOWORK=off`, but the root `go.mod`'s
+`replace …/client => ./client` directive still applies, so releases always
+build against the in-tree client. Pinning a release against a published
+`client/vX.Y.Z` tag additionally requires removing (or conditioning) that
+`replace` directive — tracked in **LW-68** (see Release, below).
 
 ### Local prerequisites
 
@@ -123,7 +125,7 @@ Release builds run with `GOWORK=off` so the provider's `go.mod` pin against a
 make lint     # golangci-lint, both modules
 make test     # client module's full test suite (testcontainers, -p 1)
 make testacc  # provider acceptance suite (TF_ACC=1, against tofu)
-make docs     # regenerate docs/ + examples/ via tfplugindocs
+make docs     # regenerate docs/ from examples/ via tfplugindocs
 make tidy     # go mod tidy, both modules
 ```
 
@@ -153,8 +155,9 @@ Releases are cut by pushing tags, in this order:
      registries index).
 
 Bump the provider's `go.mod` client dependency to the new `client/vX.Y.Z`
-before tagging the provider, so the `GOWORK=off` build resolves the release
-you just cut rather than an older one.
+before tagging the provider. Note that until the `replace …/client => ./client`
+directive is removed or conditioned (LW-68), release builds still use the
+in-tree client regardless of that pin.
 
 First-release/registry-onboarding steps (Terraform/OpenTofu Registry
 onboarding, flipping the client dependency off its dev-time placeholder pin,

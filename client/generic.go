@@ -4,6 +4,7 @@ package client
 
 import (
 	"context"
+	"net/url"
 
 	"github.com/google/uuid"
 )
@@ -20,8 +21,10 @@ func (s *GenericService) ListEntityFragments(ctx context.Context, projectID uuid
 	var out struct {
 		Fragments []string `json:"fragments"`
 	}
+	// PathEscape: entity names are user input; convention for all name-typed
+	// path segments.
 	err := s.c.do(ctx, "GET",
-		"/generic/projects/"+projectID.String()+"/schemas/entities/"+entityName+"/fragments",
+		"/generic/projects/"+projectID.String()+"/schemas/entities/"+url.PathEscape(entityName)+"/fragments",
 		nil, nil, &out)
 	return out.Fragments, err
 }

@@ -160,7 +160,8 @@ func (r *entityResource) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 	state.Name = types.StringValue(e.Name)
-	state.ProjectID = types.StringValue(e.ProjectID.String())
+	// keep the config/state value for project_id: server lowercases UUIDs
+	// and these are immutable inputs
 	state.UniqueKey = types.StringValue(e.UniqueKey)
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
