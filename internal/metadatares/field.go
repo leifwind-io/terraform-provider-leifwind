@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -78,8 +79,6 @@ func validateKeyFieldIDsCombination(connectionType string, keyFieldsSet, keyFiel
 
 // setToStrings extracts the known string elements of a set (ignoring null /
 // unknown elements). Used for both apply-time validation and the wire path.
-//
-//nolint:unused // consumed starting Task 2 (LW-86 plan); introduced now per task-1 brief interface contract
 func setToStrings(s types.Set) []string {
 	elems := s.Elements()
 	out := make([]string, 0, len(elems))
@@ -93,8 +92,6 @@ func setToStrings(s types.Set) []string {
 
 // missingKeyFieldIDs returns the supplied ids that are not present in keyIDs
 // (order preserved). nil when every supplied id is present.
-//
-//nolint:unused // consumed in Task 3 (apply-time membership validation)
 func missingKeyFieldIDs(supplied []string, keyIDs map[string]struct{}) []string {
 	var missing []string
 	for _, id := range supplied {
@@ -253,6 +250,36 @@ func (r *fieldResource) modelFromClient(f client.MetadataField, m *fieldModel) {
 	m.UniqueKey = types.StringValue(f.UniqueKey)
 }
 
+// validateKeyFieldMembership verifies the FRAGMENT field's key_field_ids all
+// reference existing KEY fields of the same entity. No-op for KEY fields
+// (beyond rejecting a stray value). The graph edge guarantees the referenced
+// KEY fields already exist by the time Create/Update runs, so a bad id here
+// means a genuine mistake — surface it as a clear diagnostic rather than a
+// downstream backend 422.
+func (r *fieldResource) validateKeyFieldMembership(ctx context.Context, plan fieldModel, f client.MetadataField) error {
+	supplied := setToStrings(plan.KeyFieldIDs)
+	if f.Connection.Type != client.ConnectionFragment {
+		if len(supplied) > 0 {
+			return fmt.Errorf("key_field_ids must not be set when connection_type is %q", f.Connection.Type)
+		}
+		return nil
+	}
+	fields, err := lookup.EntityFields(ctx, r.c, f.ProjectID, f.EntityID)
+	if err != nil {
+		return err
+	}
+	keyIDs := make(map[string]struct{})
+	for _, ef := range fields {
+		if ef.Connection.Type == client.ConnectionKey && ef.ObjectID != nil {
+			keyIDs[ef.ObjectID.String()] = struct{}{}
+		}
+	}
+	if missing := missingKeyFieldIDs(supplied, keyIDs); len(missing) > 0 {
+		return fmt.Errorf("key_field_ids: %v are not KEY fields of entity %s (reference the entity's KEY field ids)", missing, f.EntityID)
+	}
+	return nil
+}
+
 func (r *fieldResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan fieldModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -283,6 +310,11 @@ func (r *fieldResource) Create(ctx context.Context, req resource.CreateRequest, 
 			"Field already exists",
 			fmt.Sprintf("field %q already exists — terraform import leifwind_field.<name> %s/%s/%s (object_id %s)",
 				f.Name, f.ProjectID, f.EntityID, existing.ObjectID, existing.ObjectID))
+		return
+	}
+
+	if err := r.validateKeyFieldMembership(ctx, plan, f); err != nil {
+		resp.Diagnostics.AddAttributeError(path.Root("key_field_ids"), "Invalid key_field_ids", err.Error())
 		return
 	}
 
@@ -331,6 +363,11 @@ func (r *fieldResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		resp.Diagnostics.AddError("Invalid field configuration", err.Error())
 		return
 	}
+	if err := r.validateKeyFieldMembership(ctx, plan, f); err != nil {
+		resp.Diagnostics.AddAttributeError(path.Root("key_field_ids"), "Invalid key_field_ids", err.Error())
+		return
+	}
+
 	updated, err := r.c.Metadata.UpsertField(ctx, f)
 	if err != nil {
 		resp.Diagnostics.AddError("Updating field failed", err.Error())
@@ -365,4 +402,38 @@ func (r *fieldResource) ImportState(ctx context.Context, req resource.ImportStat
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project_id"), ids[0].String())...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("entity_id"), ids[1].String())...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), ids[2].String())...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// key_field_ids is config-only (never returned by GetField), so recover it
+	// from the server for FRAGMENT fields: one ListFields call locates the
+	// imported field (to read its connection_type) and collects the entity's
+	// KEY field ids. KEY fields import with key_field_ids null.
+	fields, err := lookup.EntityFields(ctx, r.c, ids[0], ids[1])
+	if err != nil {
+		resp.Diagnostics.AddError("Listing entity fields for import failed", err.Error())
+		return
+	}
+	var self *client.MetadataField
+	keyElems := make([]attr.Value, 0, len(fields))
+	for i := range fields {
+		ef := fields[i]
+		if ef.ObjectID != nil && *ef.ObjectID == ids[2] {
+			self = &fields[i]
+		}
+		if ef.Connection.Type == client.ConnectionKey && ef.ObjectID != nil {
+			keyElems = append(keyElems, types.StringValue(ef.ObjectID.String()))
+		}
+	}
+	if self == nil {
+		resp.Diagnostics.AddError("Field not found for import",
+			fmt.Sprintf("no field %s on entity %s", ids[2], ids[1]))
+		return
+	}
+	if self.Connection.Type == client.ConnectionFragment {
+		set, d := types.SetValue(types.StringType, keyElems)
+		resp.Diagnostics.Append(d...)
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("key_field_ids"), set)...)
+	}
 }
