@@ -1,11 +1,52 @@
+# GitLab-managed security templates (Free tier): SAST (semgrep) + Secret Detection.
+# Their jobs carry MR-pipeline-aware rules, so they attach to both MR and main
+# pipelines under the workflow: rules below, and land in the `test` stage.
+include:
+  - template: Jobs/SAST.gitlab-ci.yml
+  - template: Jobs/Secret-Detection.gitlab-ci.yml
+
 stages: [lint, test, release]
+
+workflow:
+  # Auto-cancel superseded pipelines when a newer commit lands on the same ref
+  # (pairs with `default: interruptible: true` below).
+  auto_cancel:
+    on_new_commit: interruptible
+  rules:
+    # NOTE: pushes to a feature branch *without* an open MR intentionally build
+    # nothing (cost control) — lint/test start once an MR exists. Deliberate; do
+    # not "fix" by adding a branch rule.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    # Unanchored (no trailing $) is deliberate, unlike the backend's anchored
+    # regex: rc tags (e.g. v0.1.0-rc1) may also release here. See LW-84.
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
+
+default:
+  interruptible: true
 
 variables:
   GO_IMAGE: "golang:1.25"
+  GOMODCACHE: $CI_PROJECT_DIR/.go-mod-cache
+  GOCACHE: $CI_PROJECT_DIR/.go-build-cache
+  # Run the GitLab AST templates (SAST, Secret Detection) in MR pipelines, not only
+  # branch pipelines — their MR-pipeline rules are gated behind this flag.
+  AST_ENABLE_MR_PIPELINES: "true"
+
+.go-cache: &go-cache
+  key:
+    files: [go.sum, client/go.sum]
+  paths: [.go-mod-cache, .go-build-cache]
 
 lint:
   stage: lint
   image: golangci/golangci-lint:v2.4.0
+  variables:
+    GOLANGCI_LINT_CACHE: $CI_PROJECT_DIR/.golangci-cache
+  cache:
+    - key:
+        files: [go.sum, client/go.sum]
+      paths: [.go-mod-cache, .go-build-cache, .golangci-cache]
   script:
     - golangci-lint run ./...
     - cd client && golangci-lint run ./...
@@ -29,6 +70,12 @@ commitlint:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
     TESTCONTAINERS_HOST_OVERRIDE: docker
+    # These dind jobs run in ephemeral, single-use runner containers, so leaked
+    # resources die with the runner anyway — Ryuk only adds startup overhead
+    # here. Keep Ryuk enabled locally (long-lived dev/docker hosts).
+    TESTCONTAINERS_RYUK_DISABLED: "true"
+  cache:
+    - *go-cache
   before_script:
     # registry auth for the private backend image (job-token allowlist on the backend project)
     - mkdir -p ~/.docker
@@ -39,6 +86,7 @@ commitlint:
 test:client:
   stage: test
   <<: *containers
+  needs: []
   script:
     # -p 1: toxiproxy fault-injection tests race under cross-package parallelism (two docker stacks)
     - cd client && go test ./... -v -timeout 30m -p 1
@@ -46,6 +94,7 @@ test:client:
 test:acceptance:
   stage: test
   <<: *containers
+  needs: []
   script:
     - apt-get update -qq && apt-get install -y -qq unzip
     - curl -fsSL https://github.com/opentofu/opentofu/releases/download/v1.10.0/tofu_1.10.0_linux_amd64.zip -o /tmp/tofu.zip
@@ -54,12 +103,25 @@ test:acceptance:
       TF_ACC_TERRAFORM_PATH=/usr/local/bin/tofu
       go test ./internal/acctest/... -v -timeout 45m
 
+govulncheck:
+  stage: test
+  image: $GO_IMAGE
+  needs: []
+  cache:
+    - *go-cache
+  script:
+    - go install golang.org/x/vuln/cmd/govulncheck@latest
+    - govulncheck ./...
+    - cd client && govulncheck ./...
+
 release-dry-run:
   stage: release
   image: $GO_IMAGE
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == "main"
+  cache:
+    - *go-cache
   script:
     - curl -fsSL https://github.com/goreleaser/goreleaser/releases/download/v2.15.4/goreleaser_Linux_x86_64.tar.gz | tar -xz -C /usr/local/bin goreleaser
     - goreleaser check
@@ -72,6 +134,10 @@ release:
   rules:
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
   needs: [lint, "test:client", "test:acceptance"]
+  # Must not be cancelled mid-publish: a superseding pipeline's auto-cancel
+  # (interruptible: true default) could otherwise kill an in-flight GitHub
+  # mirror push / goreleaser publish and leave the release half-created.
+  interruptible: false
   variables:
     GIT_DEPTH: "0"
   script:
