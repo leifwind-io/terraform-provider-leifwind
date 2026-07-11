@@ -11,7 +11,8 @@ tidy:
 	cd client && go mod tidy
 
 test:
-	cd client && go test ./... -v -timeout 20m
+	# -p 1: toxiproxy fault-injection tests race under cross-package parallelism (two docker stacks)
+	cd client && go test ./... -v -timeout 20m -p 1
 
 testacc:
 	TF_ACC=1 TF_ACC_PROVIDER_HOST=registry.opentofu.org \
