@@ -40,7 +40,8 @@ test:client:
   stage: test
   <<: *containers
   script:
-    - cd client && go test ./... -v -timeout 30m
+    # -p 1: toxiproxy fault-injection tests race under cross-package parallelism (two docker stacks)
+    - cd client && go test ./... -v -timeout 30m -p 1
 
 test:acceptance:
   stage: test
