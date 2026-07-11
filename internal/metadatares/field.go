@@ -175,10 +175,12 @@ func (m fieldModel) toClientField() (client.MetadataField, error) {
 	return f, nil
 }
 
+// modelFromClient copies server-computed attributes from f into m.
+// project_id and entity_id are deliberately NOT copied — m keeps the prior
+// plan/state values (import sets them explicitly before Read, so this holds
+// there too): server lowercases UUIDs and these are immutable inputs.
 func (r *fieldResource) modelFromClient(f client.MetadataField, m *fieldModel) {
 	m.ID = types.StringValue(f.ObjectID.String())
-	m.ProjectID = types.StringValue(f.ProjectID.String())
-	m.EntityID = types.StringValue(f.EntityID.String())
 	m.Name = types.StringValue(f.Name)
 	m.DataType = types.StringValue(string(f.Config.DataType))
 	m.ConnectionType = types.StringValue(string(f.Connection.Type))
