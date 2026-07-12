@@ -62,9 +62,10 @@ provider itself exposes (see the root [`README.md`](../README.md)).
   design (each project maps to its own Postgres schema, and schema names are
   database-global). Namespace names accordingly if you create projects
   programmatically.
-- **Deleting the last field of an entity currently 500s** in the backend's
-  `sync_entity_schema` (LW-70). Keep at least one field alive on an entity,
-  or delete the entity itself instead of every one of its fields.
+- **A FRAGMENT field requires a sibling KEY field** on the entity: creating a
+  FRAGMENT field on a keyless entity, or deleting the entity's last KEY field
+  while FRAGMENT fields remain, is rejected (422). Create KEY fields before
+  FRAGMENT fields, and delete FRAGMENT fields before the last KEY field.
 
 ## Testing your own code against a real stack
 

@@ -14,9 +14,8 @@ resource "leifwind_field" "body" {
   connection_type = "FRAGMENT"
   fragment_name   = "content"
 
-  # LW-70: force title to be created first (and destroyed last) — the
-  # backend 500s if the first field ever created on an entity is a
-  # FRAGMENT field, or if a KEY field is deleted while a FRAGMENT
-  # sibling still exists.
-  depends_on = [leifwind_field.title]
+  # A FRAGMENT field needs a sibling KEY field on the entity. Referencing the
+  # KEY field's id here makes Terraform create it first and destroy it last —
+  # no manual depends_on. List all of the entity's KEY fields.
+  key_field_ids = [leifwind_field.title.id]
 }

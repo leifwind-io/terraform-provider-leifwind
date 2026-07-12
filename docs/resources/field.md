@@ -4,14 +4,14 @@ page_title: "leifwind_field Resource - leifwind"
 subcategory: ""
 description: |-
   A leifwind metadata field. Only fragment_name is updatable in place; every other attribute forces replacement.
-  !> Warning: destroying a Terraform configuration that owns all of an entity's fields currently fails with a server 500 in sync_entity_schema when the last field is deleted (backend bug LW-70). Until the backend fix ships, keep at least one field un-managed by this configuration on each entity, or destroy the owning leifwind_entity instead of deleting every one of its fields individually.
+  FRAGMENT fields require a sibling KEY field on the entity (backend-enforced). Set key_field_ids to the entity's KEY field ids so Terraform orders creation and destruction correctly. See the key_field_ids attribute for the one case this does not cover (in-place replacement of an entity's sole KEY field).
 ---
 
 # leifwind_field (Resource)
 
 A leifwind metadata field. Only fragment_name is updatable in place; every other attribute forces replacement.
 
-!> **Warning:** destroying a Terraform configuration that owns *all* of an entity's fields currently fails with a server 500 in `sync_entity_schema` when the last field is deleted (backend bug LW-70). Until the backend fix ships, keep at least one field un-managed by this configuration on each entity, or destroy the owning `leifwind_entity` instead of deleting every one of its fields individually.
+FRAGMENT fields require a sibling KEY field on the entity (backend-enforced). Set `key_field_ids` to the entity's KEY field ids so Terraform orders creation and destruction correctly. See the `key_field_ids` attribute for the one case this does not cover (in-place replacement of an entity's sole KEY field).
 
 ## Example Usage
 
@@ -32,11 +32,10 @@ resource "leifwind_field" "body" {
   connection_type = "FRAGMENT"
   fragment_name   = "content"
 
-  # LW-70: force title to be created first (and destroyed last) — the
-  # backend 500s if the first field ever created on an entity is a
-  # FRAGMENT field, or if a KEY field is deleted while a FRAGMENT
-  # sibling still exists.
-  depends_on = [leifwind_field.title]
+  # A FRAGMENT field needs a sibling KEY field on the entity. Referencing the
+  # KEY field's id here makes Terraform create it first and destroy it last —
+  # no manual depends_on. List all of the entity's KEY fields.
+  key_field_ids = [leifwind_field.title.id]
 }
 ```
 
@@ -54,6 +53,9 @@ resource "leifwind_field" "body" {
 ### Optional
 
 - `fragment_name` (String) Fragment the field belongs to (FRAGMENT connection only). Updatable in place.
+- `key_field_ids` (Set of String) Ordering hint (config-only; never sent to the API). The object ids of this entity's KEY fields, e.g. `[leifwind_field.title.id]`. **Required for FRAGMENT fields, forbidden for KEY fields.** The backend requires a KEY field before FRAGMENT fields exist; referencing the KEY field ids here makes Terraform create the KEY first and destroy it last, without a manual `depends_on`. Reference **all** of the entity's KEY fields.
+
+This does not cover in-place replacement of an entity's *sole* KEY field (e.g. renaming it): Terraform destroys the old KEY before creating the new one, and the backend rejects deleting the last KEY while FRAGMENT fields exist. To swap a sole KEY, add the replacement KEY under a new resource address, repoint `key_field_ids`, then remove the old KEY in a separate apply.
 
 ### Read-Only
 

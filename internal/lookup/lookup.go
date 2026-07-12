@@ -53,3 +53,16 @@ func FieldByName(ctx context.Context, c *client.Client, projectID, entityID uuid
 	}
 	return nil, nil
 }
+
+// EntityFields returns all fields of an entity (all pages). Used to validate
+// key_field_ids membership and to seed it on import.
+func EntityFields(ctx context.Context, c *client.Client, projectID, entityID uuid.UUID) ([]client.MetadataField, error) {
+	var out []client.MetadataField
+	for f, err := range c.Metadata.IterFields(ctx, projectID, entityID, client.ListOpts{}) {
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, nil
+}
