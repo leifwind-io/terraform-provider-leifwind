@@ -155,6 +155,9 @@ docs:drift:
     - *go-cache
   script:
     - go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs@v0.25.0 generate --provider-name leifwind
+    # git add -N: newly generated (untracked) doc files must count as drift
+    # too — git diff alone only sees tracked files.
+    - git add -N docs/
     - git diff --exit-code docs/
 
 release-dry-run:
@@ -179,7 +182,7 @@ release:
   # govulncheck gates the tag (owner decision, LW-107): a newly published CVE
   # blocks the release; the remedy is fix-or-triage, then re-tag. No override
   # variable — do not add one.
-  needs: [lint, "test:client", "test:acceptance", govulncheck]
+  needs: [lint, "test:unit", "test:client", "test:acceptance", govulncheck]
   # Must not be cancelled mid-publish: a superseding pipeline's auto-cancel
   # (interruptible: true default) could otherwise kill an in-flight GitHub
   # mirror push / goreleaser publish and leave the release half-created.
