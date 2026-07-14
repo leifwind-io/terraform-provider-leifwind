@@ -140,6 +140,23 @@ govulncheck:
     - govulncheck ./...
     - cd client && govulncheck ./...
 
+# Generated-docs drift check (LW-108): regenerating docs/ must be a no-op.
+# The tfplugindocs version pin MUST equal the Makefile `docs` target's pin —
+# keeping them equal is a review-time check (a shared variable across the two
+# files is not worth the indirection).
+docs:drift:
+  stage: test
+  image: $GO_IMAGE
+  needs: []
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+  cache:
+    - *go-cache
+  script:
+    - go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs@v0.25.0 generate --provider-name leifwind
+    - git diff --exit-code docs/
+
 release-dry-run:
   stage: release
   image: $GO_IMAGE
