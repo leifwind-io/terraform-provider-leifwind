@@ -114,6 +114,19 @@ test:acceptance:
       TF_ACC_TERRAFORM_PATH=/usr/local/bin/tofu
       go test ./internal/acctest/... -v -timeout 45m
 
+# Root-module unit tests (internal/provider, internal/metadatares,
+# internal/lookup). Plain golang image — no dind, no services: the acctest
+# package gates container boot on TF_ACC, so this is hermetic and fast, and
+# an acceptance flake can never mask a unit regression (LW-106).
+test:unit:
+  stage: test
+  image: $GO_IMAGE
+  needs: []
+  cache:
+    - *go-cache
+  script:
+    - go test ./... -v -timeout 5m
+
 govulncheck:
   stage: test
   image: $GO_IMAGE
