@@ -27,9 +27,9 @@
 - [x] Inventory (98 units, 9 areas)
 - [x] File reviews (Opus, per unit) — 98/98 complete, 0 errors
 - [x] Area meta-reviews (Fable, per area) — 9/9 complete; 56 findings confirmed (0 critical / 6 important / 50 minor), 21 file-review claims refuted
-- [ ] Synthesis + report
-- [ ] Linear backlog items
-- [ ] Notion documentation page
+- [x] Synthesis + report — report.md (this dir)
+- [x] Linear backlog items — LW-105..LW-110 (important), LW-111..LW-116 (grouped minors); parent LW-41
+- [x] Notion documentation page — https://app.notion.com/p/39d70227d4dd8135a36bcceb2e437f1b (under Refinements)
 
 ## Review units
 
