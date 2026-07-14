@@ -134,7 +134,9 @@ govulncheck:
   cache:
     - *go-cache
   script:
-    - go install golang.org/x/vuln/cmd/govulncheck@latest
+    # Pinned, not @latest (LW-107): tool bumps are deliberate. Check
+    # `go list -m -versions golang.org/x/vuln` when bumping.
+    - go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
     - govulncheck ./...
     - cd client && govulncheck ./...
 
@@ -157,7 +159,10 @@ release:
   image: $GO_IMAGE
   rules:
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
-  needs: [lint, "test:client", "test:acceptance"]
+  # govulncheck gates the tag (owner decision, LW-107): a newly published CVE
+  # blocks the release; the remedy is fix-or-triage, then re-tag. No override
+  # variable — do not add one.
+  needs: [lint, "test:client", "test:acceptance", govulncheck]
   # Must not be cancelled mid-publish: a superseding pipeline's auto-cancel
   # (interruptible: true default) could otherwise kill an in-flight GitHub
   # mirror push / goreleaser publish and leave the release half-created.
