@@ -16,13 +16,15 @@ import (
 	"gitlab.com/leifwind/stream/terraform-provider-leifwind/client"
 )
 
-func fieldConfig(token, fragmentName string) string {
+func fieldConfig(token, projectName, fragmentName string) string {
 	// The FRAGMENT field references the KEY field via key_field_ids, which
 	// creates the Terraform graph edge that orders KEY-before-FRAGMENT on
 	// create and FRAGMENT-before-KEY on destroy (both backend-enforced, LW-70).
+	// projectName is a parameter because parallel tests share one backend and
+	// project names are globally unique (LW-71) — each caller needs its own.
 	return ProviderConfig(token) + fmt.Sprintf(`
 resource "leifwind_project" "p" {
-  name = "acc_fld_proj"
+  name = %q
 }
 
 resource "leifwind_entity" "e" {
@@ -47,7 +49,7 @@ resource "leifwind_field" "body" {
   fragment_name   = %q
   key_field_ids   = [leifwind_field.title.id]
 }
-`, fragmentName)
+`, projectName, fragmentName)
 }
 
 func TestAccFieldLifecycleAndFragmentUpdate(t *testing.T) {
@@ -59,7 +61,7 @@ func TestAccFieldLifecycleAndFragmentUpdate(t *testing.T) {
 		ProtoV6ProviderFactories: ProtoV6ProviderFactories(),
 		Steps: []resource.TestStep{
 			{
-				Config: fieldConfig(tok, "content"),
+				Config: fieldConfig(tok, "acc_fld_proj", "content"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("leifwind_field.title", "id"),
 					resource.TestCheckResourceAttr("leifwind_field.body", "fragment_name", "content"),
@@ -71,7 +73,7 @@ func TestAccFieldLifecycleAndFragmentUpdate(t *testing.T) {
 			},
 			{
 				// fragment_name is updatable IN PLACE — assert no replacement
-				Config: fieldConfig(tok, "content_v2"),
+				Config: fieldConfig(tok, "acc_fld_proj", "content_v2"),
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{
 						plancheck.ExpectResourceAction("leifwind_field.body", plancheck.ResourceActionUpdate),
@@ -283,45 +285,14 @@ resource "leifwind_field" "title" {
 	})
 }
 
-// fieldDriftConfig mirrors fieldConfig's shape under a dedicated project name
-// (parallel tests share one backend; project names are globally unique, LW-71).
-func fieldDriftConfig(token string) string {
-	return ProviderConfig(token) + `
-resource "leifwind_project" "p" {
-  name = "acc_fld_drift"
-}
-
-resource "leifwind_entity" "e" {
-  project_id = leifwind_project.p.id
-  name       = "book"
-}
-
-resource "leifwind_field" "title" {
-  project_id      = leifwind_project.p.id
-  entity_id       = leifwind_entity.e.id
-  name            = "title"
-  data_type       = "TEXT"
-  connection_type = "KEY"
-}
-
-resource "leifwind_field" "body" {
-  project_id      = leifwind_project.p.id
-  entity_id       = leifwind_entity.e.id
-  name            = "body"
-  data_type       = "TEXT"
-  connection_type = "FRAGMENT"
-  fragment_name   = "content"
-  key_field_ids   = [leifwind_field.title.id]
-}
-`
-}
-
 func TestAccFieldDriftRecreates(t *testing.T) {
 	PreCheck(t)
 	t.Parallel()
 	org := NewOrg(t)
 	tok := org.Token(t, Stack())
-	cfg := fieldDriftConfig(tok)
+	// dedicated project name: acc_fld_proj is taken by the lifecycle test
+	// running in parallel against the same backend (LW-71)
+	cfg := fieldConfig(tok, "acc_fld_drift", "content")
 	c, err := client.New(Stack().BackendURL, client.WithTokenSource(client.StaticToken(tok)))
 	if err != nil {
 		t.Fatal(err)
