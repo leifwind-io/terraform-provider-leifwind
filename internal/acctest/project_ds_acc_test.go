@@ -34,6 +34,11 @@ data "leifwind_projects" "filtered" {
   pattern    = "ds_pro"
   depends_on = [leifwind_project.p]
 }
+
+data "leifwind_projects" "nomatch" {
+  pattern    = "ds_nomatch_zz"
+  depends_on = [leifwind_project.p]
+}
 `
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: ProtoV6ProviderFactories(),
@@ -45,6 +50,8 @@ data "leifwind_projects" "filtered" {
 				resource.TestCheckResourceAttr("data.leifwind_projects.all", "projects.#", "1"),
 				resource.TestCheckResourceAttr("data.leifwind_projects.filtered", "projects.#", "1"),
 				resource.TestCheckResourceAttr("data.leifwind_projects.filtered", "projects.0.name", "ds_project"),
+				resource.TestCheckResourceAttr("data.leifwind_projects.nomatch", "projects.#", "0"),
+				resource.TestCheckResourceAttrPair("data.leifwind_project.by_id", "unique_key", "leifwind_project.p", "unique_key"),
 			),
 		}},
 	})
@@ -54,13 +61,25 @@ func TestAccProjectDataSourceValidation(t *testing.T) {
 	PreCheck(t)
 	t.Parallel()
 	org := NewOrg(t)
+	tok := org.Token(t, Stack())
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: ProtoV6ProviderFactories(),
-		Steps: []resource.TestStep{{
-			Config: ProviderConfig(org.Token(t, Stack())) + `
+		Steps: []resource.TestStep{
+			{
+				Config: ProviderConfig(tok) + `
 data "leifwind_project" "bad" {}
 `,
-			ExpectError: regexp.MustCompile(`Exactly one of these attributes must be configured`),
-		}},
+				ExpectError: regexp.MustCompile(`Exactly one of these attributes must be configured`),
+			},
+			{
+				Config: ProviderConfig(tok) + `
+data "leifwind_project" "bad" {
+  id   = "00000000-0000-0000-0000-000000000000"
+  name = "ds_both_attrs"
+}
+`,
+				ExpectError: regexp.MustCompile(`Exactly one of these attributes must be configured`),
+			},
+		},
 	})
 }
