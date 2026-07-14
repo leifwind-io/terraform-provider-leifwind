@@ -47,6 +47,10 @@ import (
 //     not); requested_token_type=id_token returns the full user-info-bearing
 //     token (email included, given the app's idTokenUserinfoAssertion) as
 //     the response's access_token field, which is what DecodeClaims reads.
+//
+// UserToken is safe to call any number of times for the same Org: each call
+// mints a fresh human user, and ZITADEL's 409 AlreadyExists on the
+// impersonator re-grant is tolerated (LW-110).
 func (s *Stack) UserToken(t testing.TB, org *Org) string {
 	t.Helper()
 
