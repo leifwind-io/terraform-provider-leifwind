@@ -10,8 +10,8 @@ import (
 
 // oidcSettings mirrors the payload of ZITADEL's admin OIDC settings API
 // (GET/PUT /admin/v1/settings/oidc). Durations are protobuf-style strings
-// with a trailing "s" (e.g. "43200s" for 12h); the API rejects other
-// formats, so callers pass pre-formatted seconds strings (e.g. "5s").
+// with a trailing "s" (e.g. "43200s" for 12h); SetAccessTokenLifetime
+// formats these strings internally before sending to the wire.
 type oidcSettings struct {
 	AccessTokenLifetime        string `json:"accessTokenLifetime"`
 	IDTokenLifetime            string `json:"idTokenLifetime"`

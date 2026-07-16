@@ -14,7 +14,9 @@ import (
 	"time"
 )
 
-// RetryConfig bounds the retry loop (Task: retries). MaxAttempts 1 disables.
+// RetryConfig bounds the retry loop. MaxAttempts 1 disables retries.
+// New normalizes invalid values: MaxAttempts < 1 becomes 1, a negative
+// MinBackoff becomes 0, and MaxBackoff is raised to at least MinBackoff.
 type RetryConfig struct {
 	MaxAttempts int
 	MinBackoff  time.Duration
