@@ -139,7 +139,7 @@ func (c *Client) doOnce(ctx context.Context, method, path string, query url.Valu
 	if resp.StatusCode >= 400 {
 		return newAPIError(method, path, resp.StatusCode, rb)
 	}
-	if out != nil {
+	if out != nil && len(rb) > 0 {
 		if err := json.Unmarshal(rb, out); err != nil {
 			return permanent(fmt.Errorf("%s %s: decode: %w", method, path, err))
 		}
