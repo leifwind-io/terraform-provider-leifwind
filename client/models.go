@@ -181,3 +181,7 @@ func (f *MetadataField) UnmarshalJSON(b []byte) error {
 		Name: w.Name, Config: w.Config, Connection: w.Connection, UniqueKey: w.UniqueKey}
 	return nil
 }
+
+func (p MetadataProject) hasObjectID() bool { return p.ObjectID != nil }
+func (e MetadataEntity) hasObjectID() bool  { return e.ObjectID != nil }
+func (f MetadataField) hasObjectID() bool   { return f.ObjectID != nil }
