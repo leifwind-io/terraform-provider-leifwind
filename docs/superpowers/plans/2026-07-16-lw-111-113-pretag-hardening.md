@@ -647,7 +647,9 @@ git add client/auth.go client/auth_unit_test.go
 git commit -m "fix(client): reject token-endpoint 200s without access_token, wrap read errors (LW-111)"
 ```
 
----### Task 4: Empty 2xx body tolerance + nil-out deletes (spec A3)
+---
+
+### Task 4: Empty 2xx body tolerance + nil-out deletes (spec A3)
 
 `doOnce` unconditionally unmarshals when `out != nil`, so a future backend 204 (or empty 200) breaks every such call — including all three `Delete*` methods, which pass a never-read `Detail` struct.
 
