@@ -100,7 +100,12 @@ type projectWire struct {
 
 // MarshalJSON marshals MetadataProject to JSON.
 func (p MetadataProject) MarshalJSON() ([]byte, error) {
-	return json.Marshal(projectWire{"metadata_project", p.ObjectID, p.Name, p.UniqueKey})
+	return json.Marshal(projectWire{
+		MetadataType: "metadata_project",
+		ObjectID:     p.ObjectID,
+		Name:         p.Name,
+		UniqueKey:    p.UniqueKey,
+	})
 }
 
 // UnmarshalJSON unmarshals MetadataProject from JSON.
@@ -131,7 +136,13 @@ type entityWire struct {
 
 // MarshalJSON marshals MetadataEntity to JSON.
 func (e MetadataEntity) MarshalJSON() ([]byte, error) {
-	return json.Marshal(entityWire{"metadata_entity", e.ObjectID, e.ProjectID, e.Name, e.UniqueKey})
+	return json.Marshal(entityWire{
+		MetadataType: "metadata_entity",
+		ObjectID:     e.ObjectID,
+		ProjectID:    e.ProjectID,
+		Name:         e.Name,
+		UniqueKey:    e.UniqueKey,
+	})
 }
 
 // UnmarshalJSON unmarshals MetadataEntity from JSON.
@@ -168,7 +179,16 @@ type fieldWire struct {
 
 // MarshalJSON marshals MetadataField to JSON.
 func (f MetadataField) MarshalJSON() ([]byte, error) {
-	return json.Marshal(fieldWire{"metadata_field", f.ObjectID, f.ProjectID, f.EntityID, f.Name, f.Config, f.Connection, f.UniqueKey})
+	return json.Marshal(fieldWire{
+		MetadataType: "metadata_field",
+		ObjectID:     f.ObjectID,
+		ProjectID:    f.ProjectID,
+		EntityID:     f.EntityID,
+		Name:         f.Name,
+		Config:       f.Config,
+		Connection:   f.Connection,
+		UniqueKey:    f.UniqueKey,
+	})
 }
 
 // UnmarshalJSON unmarshals MetadataField from JSON.
