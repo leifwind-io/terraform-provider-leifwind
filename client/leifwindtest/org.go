@@ -133,7 +133,7 @@ func fetchToken(issuer, clientID, clientSecret string, form url.Values) (string,
 	}
 	req.SetBasicAuth(clientID, clientSecret)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", 0, err
 	}

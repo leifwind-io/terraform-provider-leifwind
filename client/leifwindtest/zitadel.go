@@ -22,6 +22,10 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
+// httpClient bounds every fixture HTTP call; the per-site deadline loops
+// only check between requests, so a hung connection must fail on its own.
+var httpClient = &http.Client{Timeout: 15 * time.Second}
+
 func freePort() (int, error) {
 	l, err := net.Listen("tcp", ":0") //nolint:gosec // test-only: binds to all interfaces to probe a free port, not to serve
 	if err != nil {
@@ -181,7 +185,7 @@ func (s *Stack) waitZitadelReady() error {
 		time.Sleep(2 * time.Second)
 	}
 	for {
-		resp, err := http.Get(s.Issuer + "/.well-known/openid-configuration")
+		resp, err := httpClient.Get(s.Issuer + "/.well-known/openid-configuration")
 		if err == nil {
 			body, _ := io.ReadAll(resp.Body)
 			_ = resp.Body.Close()
@@ -241,7 +245,7 @@ func (s *Stack) mgmtDo(method, path, orgID string, body, out any) error {
 		if orgID != "" {
 			req.Header.Set("x-zitadel-orgid", orgID)
 		}
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := httpClient.Do(req)
 		if err != nil {
 			return err
 		}
