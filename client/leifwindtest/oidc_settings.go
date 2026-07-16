@@ -25,10 +25,9 @@ type oidcSettings struct {
 // instance would otherwise start minting tokens with the same short
 // lifetime.
 //
-// Feasibility (throwaway spike, see task-27 report): PUT
-// accessTokenLifetime=10s against a fresh instance is accepted (200) and
-// takes effect immediately — the next machine-user token minted afterward
-// had exp-iat == 10s exactly.
+// Feasibility (verified on v4.15.3): PUT accessTokenLifetime=10s against a
+// fresh instance is accepted (200) and takes effect immediately — the next
+// machine-user token minted afterward had exp-iat == 10s exactly.
 func (s *Stack) SetAccessTokenLifetime(t testing.TB, lifetime string) {
 	t.Helper()
 	var current struct {

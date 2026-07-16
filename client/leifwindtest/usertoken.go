@@ -12,10 +12,11 @@ import (
 
 // UserToken mints a genuine delegated user token via RFC 8693 token
 // exchange (user_id subject type): sub = a human user, email claim present.
-// This is the token shape LW-44's runner forwards.
+// This is the token shape the plan/apply runner forwards on behalf of a
+// human user.
 //
-// This diverges from the brief in three concrete, investigated ways — see
-// the task-10 report for the full trace. Summary:
+// The exchange flow deviates from ZITADEL's documented behavior in three
+// concrete, investigated ways on v4.15.3:
 //
 //  1. The v4.15.3 image ships oidcTokenExchange already enabled
 //     instance-wide (source: SOURCE_SYSTEM). PUTting the same value ZITADEL
@@ -139,7 +140,7 @@ func (s *Stack) UserToken(t testing.TB, org *Org) string {
 	}
 	tok, status, err := fetchToken(s.Issuer, s.exchangeAppClientID, s.exchangeAppClientSecret, form)
 	if err != nil || status != 200 {
-		t.Fatalf("token exchange failed (status=%d): %v — see spec 'Risks': pre-GA flag on v4.15.3; investigate before falling back", status, err)
+		t.Fatalf("token exchange failed (status=%d): %v (oidcTokenExchange is pre-GA in ZITADEL v4.15.3 — investigate before changing the flow)", status, err)
 	}
 	return tok
 }
