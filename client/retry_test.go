@@ -89,7 +89,12 @@ func TestContextCancelAbortsBackoff(t *testing.T) {
 
 func TestDeleteRetryTolerates404(t *testing.T) {
 	proxy := sharedStack.Toxiproxy()
-	c, _ := proxiedClient(t, client.RetryConfig{MaxAttempts: 4, MinBackoff: 400 * time.Millisecond, MaxBackoff: 2 * time.Second})
+	// MaxAttempts 10: the toxic below is lifted on a wall-clock timer while
+	// full-jitter backoff has no lower bound, so with few attempts the whole
+	// retry budget can fit inside the toxic window and every attempt fails
+	// (observed on CI). Ten attempts make that practically impossible while
+	// the happy path still finishes after the first post-window attempt.
+	c, ct := proxiedClient(t, client.RetryConfig{MaxAttempts: 10, MinBackoff: 400 * time.Millisecond, MaxBackoff: 2 * time.Second})
 	ctx := context.Background()
 	p, err := c.Metadata.UpsertProject(ctx, client.MetadataProject{Name: "del_retry"})
 	if err != nil {
@@ -109,8 +114,10 @@ func TestDeleteRetryTolerates404(t *testing.T) {
 		_ = proxy.RemoveToxic(toxic.Name)
 	}()
 
+	before := ct.calls.Load()
 	if err := c.Metadata.DeleteProject(ctx, *p.ObjectID); err != nil {
-		t.Fatalf("DELETE retry must tolerate 404 after failed attempt, got %v", err)
+		t.Fatalf("DELETE retry must tolerate 404 after failed attempt (%d wire attempts), got %v",
+			ct.calls.Load()-before, err)
 	}
 	if _, err := c.Metadata.GetProject(ctx, *p.ObjectID); !errors.Is(err, client.ErrNotFound) {
 		t.Fatalf("project should be gone, got %v", err)
