@@ -70,12 +70,20 @@ func New(endpoint string, opts ...Option) (*Client, error) {
 		o(&s)
 	}
 	// Normalize the retry config once: sleepBackoff must never see a
-	// negative bound (rand.Int64N panics on non-positive arguments).
+	// negative bound (rand.Int64N panics on non-positive arguments) nor a
+	// bound whose +1 jitter increment would overflow int64.
+	const maxJitterBackoff = time.Duration(1<<63 - 2)
 	if s.retry.MaxAttempts < 1 {
 		s.retry.MaxAttempts = 1
 	}
 	if s.retry.MinBackoff < 0 {
 		s.retry.MinBackoff = 0
+	}
+	if s.retry.MinBackoff > maxJitterBackoff {
+		s.retry.MinBackoff = maxJitterBackoff
+	}
+	if s.retry.MaxBackoff > maxJitterBackoff {
+		s.retry.MaxBackoff = maxJitterBackoff
 	}
 	if s.retry.MaxBackoff < s.retry.MinBackoff {
 		s.retry.MaxBackoff = s.retry.MinBackoff

@@ -3,7 +3,11 @@
 package leifwindtest
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -33,5 +37,41 @@ func TestSetAccessTokenLifetimeRejectsNonWholeSeconds(t *testing.T) {
 		if !strings.Contains(rec.msg, "whole number of seconds") {
 			t.Errorf("lifetime %v: guard did not fire (msg=%q)", d, rec.msg)
 		}
+	}
+}
+
+func TestSetAccessTokenLifetimeSerializesWholeSeconds(t *testing.T) {
+	t.Parallel()
+	var putBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/admin/v1/settings/oidc" {
+			http.NotFound(w, r)
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			_, _ = w.Write([]byte(`{"settings":{"accessTokenLifetime":"43200s","idTokenLifetime":"43200s","refreshTokenIdleExpiration":"1296000s","refreshTokenExpiration":"7776000s"}}`))
+		case http.MethodPut:
+			b, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			putBody = b
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			http.Error(w, "method", http.StatusMethodNotAllowed)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	(&Stack{Issuer: srv.URL}).SetAccessTokenLifetime(t, 5*time.Second)
+
+	var sent oidcSettings
+	if err := json.Unmarshal(putBody, &sent); err != nil {
+		t.Fatalf("unmarshal PUT body: %v", err)
+	}
+	if sent.AccessTokenLifetime != "5s" {
+		t.Fatalf("accessTokenLifetime = %q, want \"5s\"", sent.AccessTokenLifetime)
 	}
 }

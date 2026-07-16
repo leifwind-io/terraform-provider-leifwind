@@ -6,7 +6,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"regexp"
 	"runtime/debug"
 	"testing"
 )
@@ -57,7 +56,7 @@ func TestVersionStampsUserAgent(t *testing.T) {
 	if _, err := c.Metadata.ListProjects(context.Background(), ListOpts{}); err != nil {
 		t.Fatal(err)
 	}
-	if !regexp.MustCompile(`^terraform-provider-leifwind-client/\S+$`).MatchString(ua) {
-		t.Fatalf("User-Agent = %q, want ^terraform-provider-leifwind-client/<version>", ua)
+	if want := "terraform-provider-leifwind-client/" + Version(); ua != want {
+		t.Fatalf("User-Agent = %q, want %q", ua, want)
 	}
 }
