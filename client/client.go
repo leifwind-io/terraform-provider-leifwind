@@ -14,9 +14,6 @@ import (
 	"time"
 )
 
-// Version is stamped into the default User-Agent.
-const Version = "0.1.0-dev"
-
 // RetryConfig bounds the retry loop (Task: retries). MaxAttempts 1 disables.
 type RetryConfig struct {
 	MaxAttempts int
@@ -81,7 +78,7 @@ func New(endpoint string, opts ...Option) (*Client, error) {
 	if s.retry.MaxBackoff < s.retry.MinBackoff {
 		s.retry.MaxBackoff = s.retry.MinBackoff
 	}
-	ua := "terraform-provider-leifwind-client/" + Version
+	ua := "terraform-provider-leifwind-client/" + Version()
 	if s.ua != "" {
 		ua = s.ua + " " + ua
 	}
