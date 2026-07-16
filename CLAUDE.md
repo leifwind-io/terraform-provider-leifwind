@@ -1,0 +1,2 @@
+- Use "command glab" instead of "glab" to avoid the 1password wrapper.
+- .env contains a gitlab token and should never be read in cleartext
