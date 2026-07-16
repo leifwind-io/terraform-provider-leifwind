@@ -70,6 +70,17 @@ func New(endpoint string, opts ...Option) (*Client, error) {
 	for _, o := range opts {
 		o(&s)
 	}
+	// Normalize the retry config once: sleepBackoff must never see a
+	// negative bound (rand.Int64N panics on non-positive arguments).
+	if s.retry.MaxAttempts < 1 {
+		s.retry.MaxAttempts = 1
+	}
+	if s.retry.MinBackoff < 0 {
+		s.retry.MinBackoff = 0
+	}
+	if s.retry.MaxBackoff < s.retry.MinBackoff {
+		s.retry.MaxBackoff = s.retry.MinBackoff
+	}
 	ua := "terraform-provider-leifwind-client/" + Version
 	if s.ua != "" {
 		ua = s.ua + " " + ua
@@ -97,13 +108,13 @@ func (c *Client) doOnce(ctx context.Context, method, path string, query url.Valu
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
-			return fmt.Errorf("%s %s: encode: %w", method, path, err)
+			return permanent(fmt.Errorf("%s %s: encode: %w", method, path, err))
 		}
 		rdr = bytes.NewReader(b)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, u, rdr)
 	if err != nil {
-		return err
+		return permanent(fmt.Errorf("%s %s: build request: %w", method, path, err))
 	}
 	req.Header.Set("User-Agent", c.ua)
 	if body != nil {
@@ -130,7 +141,7 @@ func (c *Client) doOnce(ctx context.Context, method, path string, query url.Valu
 	}
 	if out != nil {
 		if err := json.Unmarshal(rb, out); err != nil {
-			return fmt.Errorf("%s %s: decode: %w", method, path, err)
+			return permanent(fmt.Errorf("%s %s: decode: %w", method, path, err))
 		}
 	}
 	return nil
