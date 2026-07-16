@@ -55,10 +55,7 @@ func (s *MetadataService) GetProject(ctx context.Context, projectID uuid.UUID) (
 // DeleteProject deletes a project; entities/fields cascade server-side and
 // the per-project schema is dropped.
 func (s *MetadataService) DeleteProject(ctx context.Context, projectID uuid.UUID, opts ...WriteOption) error {
-	var out struct {
-		Detail string `json:"detail"`
-	}
-	return s.c.do(ctx, "DELETE", "/metadata/projects/"+projectID.String(), writeValues(opts), nil, &out)
+	return s.c.do(ctx, "DELETE", "/metadata/projects/"+projectID.String(), writeValues(opts), nil, nil)
 }
 
 // ListProjects returns one page.
@@ -97,12 +94,9 @@ func (s *MetadataService) GetEntity(ctx context.Context, projectID, entityID uui
 
 // DeleteEntity deletes an entity; its fields cascade server-side.
 func (s *MetadataService) DeleteEntity(ctx context.Context, projectID, entityID uuid.UUID, opts ...WriteOption) error {
-	var out struct {
-		Detail string `json:"detail"`
-	}
 	return s.c.do(ctx, "DELETE",
 		"/metadata/projects/"+projectID.String()+"/entities/"+entityID.String(),
-		writeValues(opts), nil, &out)
+		writeValues(opts), nil, nil)
 }
 
 // ListEntities returns one page of a project's entities.
@@ -142,12 +136,9 @@ func (s *MetadataService) GetField(ctx context.Context, projectID, entityID, fie
 
 // DeleteField deletes a field (drops the backing column server-side).
 func (s *MetadataService) DeleteField(ctx context.Context, projectID, entityID, fieldID uuid.UUID, opts ...WriteOption) error {
-	var out struct {
-		Detail string `json:"detail"`
-	}
 	return s.c.do(ctx, "DELETE",
 		"/metadata/projects/"+projectID.String()+"/entities/"+entityID.String()+"/fields/"+fieldID.String(),
-		writeValues(opts), nil, &out)
+		writeValues(opts), nil, nil)
 }
 
 // ListFields returns one page of an entity's fields (404 for bogus entities).
