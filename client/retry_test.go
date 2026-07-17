@@ -119,6 +119,9 @@ func TestDeleteRetryTolerates404(t *testing.T) {
 		t.Fatalf("DELETE retry must tolerate 404 after failed attempt (%d wire attempts), got %v",
 			ct.calls.Load()-before, err)
 	}
+	if attempts := ct.calls.Load() - before; attempts < 2 {
+		t.Fatalf("DELETE retry test made only %d wire attempt(s); expected the toxic first attempt plus a retry", attempts)
+	}
 	if _, err := c.Metadata.GetProject(ctx, *p.ObjectID); !errors.Is(err, client.ErrNotFound) {
 		t.Fatalf("project should be gone, got %v", err)
 	}
