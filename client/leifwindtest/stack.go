@@ -38,7 +38,7 @@ type stackSettings struct {
 type StackOption func(*stackSettings)
 
 // WithToxiproxy routes ProxiedBackendURL through a toxiproxy container
-// (fault injection; fully wired in the retry task).
+// for fault injection.
 func WithToxiproxy() StackOption {
 	return func(s *stackSettings) { s.toxiproxy = true }
 }
@@ -47,8 +47,8 @@ func WithToxiproxy() StackOption {
 type Stack struct {
 	Issuer            string // ZITADEL external URL (token iss)
 	Audience          string // ZITADEL API project id (token aud)
-	BackendURL        string // set by startBackend (Task 11)
-	ProxiedBackendURL string // set by WithToxiproxy (Task 17)
+	BackendURL        string // set by startBackend
+	ProxiedBackendURL string // set by WithToxiproxy
 
 	ctx          context.Context
 	mgmtPAT      string

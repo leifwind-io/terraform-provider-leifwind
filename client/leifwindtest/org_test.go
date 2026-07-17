@@ -12,7 +12,7 @@ func TestNewOrgMintsJWTWithOrgAndAudience(t *testing.T) {
 	org := s.NewOrg(t)
 	tok := org.Token(t, s)
 	if strings.Count(tok, ".") != 2 {
-		t.Fatalf("expected a JWT (3 segments), got %q…", tok[:20])
+		t.Fatalf("expected a JWT (3 segments), got %q…", tok[:min(len(tok), 20)])
 	}
 	claims := DecodeClaims(t, tok)
 	if claims["urn:zitadel:iam:user:resourceowner:id"] != org.ID {

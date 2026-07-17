@@ -11,6 +11,15 @@ import (
 	"time"
 )
 
+// permanentError marks a failure as deterministic: retrying cannot change
+// the outcome (request-body encode, request construction, 2xx decode).
+type permanentError struct{ err error }
+
+func (p *permanentError) Error() string { return p.err.Error() }
+func (p *permanentError) Unwrap() error { return p.err }
+
+func permanent(err error) error { return &permanentError{err: err} }
+
 // doRetry wraps doOnce: retries transport errors and 5xx for every verb
 // (upserts/deletes are idempotent by natural-key design). 4xx never retries.
 // A DELETE answered 404 on attempt > 1 is success: the earlier attempt may
@@ -32,6 +41,11 @@ func (c *Client) doRetry(ctx context.Context, method, path string, query url.Val
 				return nil
 			}
 			if apiErr.StatusCode < 500 {
+				return err
+			}
+		} else {
+			var perm *permanentError
+			if errors.As(err, &perm) {
 				return err
 			}
 		}

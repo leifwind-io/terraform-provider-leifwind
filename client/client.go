@@ -14,10 +14,9 @@ import (
 	"time"
 )
 
-// Version is stamped into the default User-Agent.
-const Version = "0.1.0-dev"
-
-// RetryConfig bounds the retry loop (Task: retries). MaxAttempts 1 disables.
+// RetryConfig bounds the retry loop. MaxAttempts 1 disables retries.
+// New normalizes invalid values: MaxAttempts < 1 becomes 1, a negative
+// MinBackoff becomes 0, and MaxBackoff is raised to at least MinBackoff.
 type RetryConfig struct {
 	MaxAttempts int
 	MinBackoff  time.Duration
@@ -70,7 +69,26 @@ func New(endpoint string, opts ...Option) (*Client, error) {
 	for _, o := range opts {
 		o(&s)
 	}
-	ua := "terraform-provider-leifwind-client/" + Version
+	// Normalize the retry config once: sleepBackoff must never see a
+	// negative bound (rand.Int64N panics on non-positive arguments) nor a
+	// bound whose +1 jitter increment would overflow int64.
+	const maxJitterBackoff = time.Duration(1<<63 - 2)
+	if s.retry.MaxAttempts < 1 {
+		s.retry.MaxAttempts = 1
+	}
+	if s.retry.MinBackoff < 0 {
+		s.retry.MinBackoff = 0
+	}
+	if s.retry.MinBackoff > maxJitterBackoff {
+		s.retry.MinBackoff = maxJitterBackoff
+	}
+	if s.retry.MaxBackoff > maxJitterBackoff {
+		s.retry.MaxBackoff = maxJitterBackoff
+	}
+	if s.retry.MaxBackoff < s.retry.MinBackoff {
+		s.retry.MaxBackoff = s.retry.MinBackoff
+	}
+	ua := "terraform-provider-leifwind-client/" + Version()
 	if s.ua != "" {
 		ua = s.ua + " " + ua
 	}
@@ -97,13 +115,13 @@ func (c *Client) doOnce(ctx context.Context, method, path string, query url.Valu
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
-			return fmt.Errorf("%s %s: encode: %w", method, path, err)
+			return permanent(fmt.Errorf("%s %s: encode: %w", method, path, err))
 		}
 		rdr = bytes.NewReader(b)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, u, rdr)
 	if err != nil {
-		return err
+		return permanent(fmt.Errorf("%s %s: build request: %w", method, path, err))
 	}
 	req.Header.Set("User-Agent", c.ua)
 	if body != nil {
@@ -128,9 +146,9 @@ func (c *Client) doOnce(ctx context.Context, method, path string, query url.Valu
 	if resp.StatusCode >= 400 {
 		return newAPIError(method, path, resp.StatusCode, rb)
 	}
-	if out != nil {
+	if out != nil && len(rb) > 0 {
 		if err := json.Unmarshal(rb, out); err != nil {
-			return fmt.Errorf("%s %s: decode: %w", method, path, err)
+			return permanent(fmt.Errorf("%s %s: decode: %w", method, path, err))
 		}
 	}
 	return nil
