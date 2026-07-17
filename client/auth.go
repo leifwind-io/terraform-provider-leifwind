@@ -107,7 +107,10 @@ func (c *ccTokenSource) Token(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("token endpoint: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("token endpoint: read body: %w", err)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return "", &APIError{StatusCode: resp.StatusCode, Detail: string(body),
 			Method: http.MethodPost, Path: "/oauth/v2/token"}
@@ -121,6 +124,9 @@ func (c *ccTokenSource) Token(ctx context.Context) (string, error) {
 	}
 	if out.ExpiresIn == 0 {
 		out.ExpiresIn = 3600
+	}
+	if out.AccessToken == "" {
+		return "", fmt.Errorf("token endpoint: 200 response without access_token")
 	}
 	c.token = out.AccessToken
 	c.expiresAt = c.now().Add(time.Duration(out.ExpiresIn) * time.Second)

@@ -13,7 +13,9 @@ import (
 
 const toxiproxyImage = "ghcr.io/shopify/toxiproxy:2.12.0"
 
-// Toxiproxy returns the control handle for the backend proxy.
+// Toxiproxy returns the control handle for the backend proxy. The return
+// type couples this API to github.com/Shopify/toxiproxy/v2/client:
+// consumers import that module to drive the handle.
 // Panics unless the stack was started WithToxiproxy().
 func (s *Stack) Toxiproxy() *toxiproxy.Proxy {
 	if s.backendProxy == nil {
@@ -41,15 +43,15 @@ func (s *Stack) startToxiproxy() error {
 
 	host, err := tp.Host(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("toxiproxy host: %w", err)
 	}
 	adminPort, err := tp.MappedPort(ctx, "8474/tcp")
 	if err != nil {
-		return err
+		return fmt.Errorf("toxiproxy admin port: %w", err)
 	}
 	dataPort, err := tp.MappedPort(ctx, "8666/tcp")
 	if err != nil {
-		return err
+		return fmt.Errorf("toxiproxy data port: %w", err)
 	}
 
 	tpc := toxiproxy.NewClient(fmt.Sprintf("%s:%s", host, adminPort.Port()))

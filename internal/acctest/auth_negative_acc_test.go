@@ -164,7 +164,7 @@ func TestAccExpiredToken(t *testing.T) {
 	PreCheck(t)
 	t.Parallel() // dedicated-stack boot + expiry poll overlap the shared-stack tests
 	s := leifwindtest.Start(t)
-	s.SetAccessTokenLifetime(t, "5s")
+	s.SetAccessTokenLifetime(t, 5*time.Second)
 	org := s.NewOrg(t)
 	tok := org.Token(t, s)
 
