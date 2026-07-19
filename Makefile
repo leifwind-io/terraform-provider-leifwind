@@ -11,6 +11,8 @@ tidy:
 	cd client && go mod tidy
 
 test:
+	# root module first: cheap and hermetic (internal/acctest gates on TF_ACC), fail fast
+	go test ./... -timeout 5m
 	# -p 1: toxiproxy fault-injection tests race under cross-package parallelism (two docker stacks)
 	cd client && go test ./... -v -timeout 20m -p 1
 

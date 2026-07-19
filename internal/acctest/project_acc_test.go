@@ -85,10 +85,17 @@ resource "leifwind_project" "p" {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var firstProjectID string
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: ProtoV6ProviderFactories(),
 		Steps: []resource.TestStep{
-			{Config: cfg},
+			{
+				Config: cfg,
+				Check: resource.TestCheckResourceAttrWith("leifwind_project.p", "id", func(v string) error {
+					firstProjectID = v
+					return nil
+				}),
+			},
 			{
 				PreConfig: func() {
 					// delete out-of-band: Read must RemoveResource, apply recreates
@@ -101,9 +108,13 @@ resource "leifwind_project" "p" {
 					}
 				},
 				Config: cfg,
-				Check:  resource.TestCheckResourceAttrSet("leifwind_project.p", "id"),
+				Check: resource.TestCheckResourceAttrWith("leifwind_project.p", "id", func(v string) error {
+					if v == firstProjectID {
+						return fmt.Errorf("project was not recreated: id %s unchanged after out-of-band delete", v)
+					}
+					return nil
+				}),
 			},
 		},
 	})
-	_ = fmt.Sprintf
 }

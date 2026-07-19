@@ -22,6 +22,11 @@ func TestAccMissingCredentials(t *testing.T) {
 	// (Go panics on the combination). This test is seconds-fast anyway.
 	// no token, no M2M block, and empty env (TF_ACC runner must not leak LEIFWIND_*)
 	t.Setenv("LEIFWIND_TOKEN", "")
+	// ...including the M2M fallbacks: a runner exporting these would let the
+	// provider authenticate and break the "no credentials" expectation.
+	t.Setenv("LEIFWIND_OIDC_ISSUER", "")
+	t.Setenv("LEIFWIND_CLIENT_ID", "")
+	t.Setenv("LEIFWIND_CLIENT_SECRET", "")
 	cfg := fmt.Sprintf(`
 provider "leifwind" {
   endpoint = %q
