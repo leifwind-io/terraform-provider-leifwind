@@ -19,6 +19,7 @@
 - **Manual prerequisites (owner, GitLab UI — not code, verified in Task 7):**
   - CI/CD variables (masked + protected): `GPG_PRIVATE_KEY`, `GPG_PASSPHRASE`, `GPG_FINGERPRINT`, `GITHUB_MIRROR_TOKEN`. GPG key must be **RSA** (registry requirement). `GPG_FINGERPRINT` is read by `.goreleaser.yml` and is missing from the LW-68 checklist — do not skip it.
   - Protected tag patterns `v*` **and** `client/v*`, "allowed to create: Maintainers". Without protection, masked+protected variables are not injected into tag pipelines.
+  - Protected branch patterns `hotfix/*` **and** `rc/*` ("allowed to push: Maintainers", merge per team policy). The `release:tag` job is gated on `CI_COMMIT_REF_PROTECTED == "true"`: on an unprotected branch the tag-minting job (which runs repo-controlled scripts under the retrier's inherited job-token permissions) must never exist, or a Developer push + Maintainer retry becomes a privilege escalation into protected-tag creation.
   - GitHub fine-grained PAT (`contents: read/write` on `leifwind-io/terraform-provider-leifwind` only) as `GITHUB_MIRROR_TOKEN`.
 - **PSR pinned to exactly `10.6.1`** — the backend verified its bump/no-bump behavior empirically at this version; the monorepo parser needs ≥ 10.4.0.
 - **All commits in this MR use non-bumping conventional types** (`ci:`, `docs:`, `chore:`) — commit subjects are release inputs from now on.
@@ -28,7 +29,7 @@
 
 ## File Structure
 
-```
+```text
 ci/release-tools.in        # NEW  — direct deps for release tooling (PSR, commitizen)
 ci/release-tools.txt       # NEW  — uv pip compile --generate-hashes output
 ci/psr-client.toml         # NEW  — PSR config: tag_format client/v{version}, path_filters client/**
@@ -54,7 +55,7 @@ README.md                  # MOD  — version-logic + commit-contract documentat
 
 - [ ] **Step 1: Write `ci/release-tools.in`**
 
-```
+```text
 # Release tooling for CI only — never part of the Go toolchain or any
 # project dependency set. Compiled to release-tools.txt with hashes:
 #   uv pip compile --generate-hashes --python-version 3.14 ci/release-tools.in -o ci/release-tools.txt
@@ -190,6 +191,7 @@ The parser is young (10.4+); the backend's habit of verifying PSR behavior empir
 
 Run:
 ```bash
+REPO_ROOT=$(git rev-parse --show-toplevel)  # capture BEFORE cd'ing away — Step 5 and Task 3 Step 5 cd back here
 SCRATCH=$(mktemp -d)
 git clone --quiet . "$SCRATCH/repo"
 cd "$SCRATCH/repo"
@@ -231,12 +233,12 @@ Expected: the eight printed tags match the inline comments exactly. `ci/release_
 
 1. **T1/T2 wrong but errors mention paths:** relative-path base differs from the docs — strip every `../` prefix in both configs' `path_filters` (i.e. `"client/**"`, `"internal/**"`, …, resolved from the repo root / cwd).
 2. **T3 wrong (provider missed the client-scoped commit):** delete the `scope_prefix` line from `ci/psr-provider.toml` (path-only attribution). If PSR then errors that `scope_prefix` is required, restore it and go to rung 3.
-3. **T3 still wrong:** change `ci/psr-provider.toml` to `commit_parser = "conventional"` and delete its `[semantic_release.commit_parser_options]` table entirely. This over-releases (any `fix:`/`feat:` anywhere bumps the provider, even docs-only ones) but never *misses* a release — the safe direction. Record which rung was applied in the commit message and in the README task.
+3. **T3 still wrong:** change `ci/psr-provider.toml` to `commit_parser = "conventional"` and delete its `[semantic_release.commit_parser_options]` table entirely. This over-releases (a `fix:`/`feat:` commit bumps the provider regardless of which paths it touches — client-only or docs-tree-only changes included; `docs:`-type commits still never bump) but never *misses* a release — the safe direction. Record which rung was applied in the commit message and in the README task.
 
 - [ ] **Step 5: Clean up the scratch clone and commit**
 
 ```bash
-cd /home/bbruhn/Projects/leifwind/leifwind-stream/terraform-provider-leifwind && rm -rf "$SCRATCH"
+cd "$REPO_ROOT" && rm -rf "$SCRATCH"
 git add ci/psr-client.toml ci/psr-provider.toml
 git commit -m "ci: add path-scoped PSR configs for client/v* and v* tag families"
 ```
@@ -281,6 +283,8 @@ CZ=".release-tools-venv/bin/cz"
 runbook() {
   echo "RUNBOOK: a red release:tag means A RELEASE MAY BE MISSING, not just a failed job." >&2
   echo "RUNBOOK: retry this job as a Maintainer (a Developer retry 403s on protected tags)." >&2
+  echo "RUNBOOK: a retry re-runs this branch's ci/ scripts with YOUR inherited permissions;" >&2
+  echo "RUNBOOK: this job only exists on protected refs (rules gate) — never loosen that." >&2
   echo "RUNBOOK: if this pipeline was superseded by a newer one, do NOT retry — the next" >&2
   echo "RUNBOOK: merge releases everything (bumps are delayed, never lost)." >&2
 }
@@ -301,18 +305,22 @@ fi
 
 HEAD_SHA="${CI_COMMIT_SHA:-$(git rev-parse HEAD)}"
 
-TAG=$($PSR -c "$CONFIG" version --print-tag) || {
-  runbook
-  echo "FATAL: 'semantic-release version --print-tag' failed for $COMPONENT" >&2
-  exit 1
+# Compute (or after a tag refetch: recompute) TAG + ENC_TAG. Tag names
+# contain '/' for the client — URL-encode for Releases API paths.
+compute_tag() {
+  TAG=$($PSR -c "$CONFIG" version --print-tag) || {
+    runbook
+    echo "FATAL: 'semantic-release version --print-tag' failed for $COMPONENT" >&2
+    exit 1
+  }
+  if [ -z "$TAG" ]; then
+    runbook
+    echo "FATAL: PSR printed nothing for $COMPONENT — refusing to guess (never treat empty output as a bump)" >&2
+    exit 1
+  fi
+  ENC_TAG=$(jq -rn --arg t "$TAG" '$t|@uri')
 }
-if [ -z "$TAG" ]; then
-  runbook
-  echo "FATAL: PSR printed nothing for $COMPONENT — refusing to guess (never treat empty output as a bump)" >&2
-  exit 1
-fi
-# Tag names contain '/' for the client — URL-encode for Releases API paths.
-ENC_TAG=$(jq -rn --arg t "$TAG" '$t|@uri')
+compute_tag
 
 log_no_release() {
   echo "No release for $COMPONENT: $TAG already exists ($1)."
@@ -325,35 +333,63 @@ log_no_release() {
   done
 }
 
+# Cross-check: every automation-minted tag has a Release object (the
+# POST creates both atomically). A lineage tag WITHOUT one is a
+# hand-pushed tag or a half-finished rollback — bless neither silently.
+require_release_object() {
+  if [ "$DRY" = "0" ]; then
+    if ! curl --fail --silent --show-error --retry 3 --retry-all-errors \
+        --header "JOB-TOKEN: $CI_JOB_TOKEN" "$API/releases/$ENC_TAG" >/dev/null; then
+      runbook
+      echo "FATAL: tag $TAG exists on this lineage but has NO Release object — hand-pushed" >&2
+      echo "tag or half-finished rollback. Delete tag + Release together; never reuse the" >&2
+      echo "version number (a bad release is superseded, not replaced). Tag info:" >&2
+      git for-each-ref --format='%(refname:short) %(objecttype) %(taggername) %(taggerdate)' "refs/tags/$TAG" | scrub >&2
+      exit 1
+    fi
+  fi
+}
+
 # Disposition of an existing tag decides everything. PSR prints the CURRENT
 # tag when no release is due (verified in the plan's Task 2 T4) — so tag
 # existence + lineage decides, never version-string equality:
-#   on lineage -> green no-op (no bump due; or the benign quick-succession
-#                 race; or a superseded pipeline retried after its version
-#                 shipped at a newer SHA)
+#   at HEAD    -> green no-op unconditionally (no commit can sit after HEAD)
+#   on lineage -> refetch tags + recompute ONCE, then decide again: an
+#                 ancestor tag minted by a concurrent pipeline after our
+#                 first fetch may hide release-worthy commits between it and
+#                 HEAD — recomputing against the fresh tag mints the
+#                 follow-up version instead of silently green-skipping it.
+#                 If the recompute stands pat this is the benign
+#                 quick-succession no-op (no bump due past the tag) or a
+#                 superseded pipeline retried after its version shipped at a
+#                 newer SHA.
 #   unrelated  -> loud red (hijack, or two prerelease branches fighting over
 #                 one rc sequence)
 #   absent     -> mint it
 # Returns 0 = benign no-op, 1 = tag absent; exits 1 = refuse.
+RECOMPUTED=0
 tag_disposition() {
   existing=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}") || return 1
-  if [ "$existing" = "$HEAD_SHA" ] \
-    || git merge-base --is-ancestor "$existing" "$HEAD_SHA" \
+  if [ "$existing" = "$HEAD_SHA" ]; then
+    require_release_object
+    log_no_release "at $existing = HEAD"
+    return 0
+  fi
+  if git merge-base --is-ancestor "$existing" "$HEAD_SHA" \
     || git merge-base --is-ancestor "$HEAD_SHA" "$existing"; then
-    if [ "$DRY" = "0" ]; then
-      # Cross-check: every automation-minted tag has a Release object (the
-      # POST creates both atomically). A lineage tag WITHOUT one is a
-      # hand-pushed tag or a half-finished rollback — bless neither silently.
-      if ! curl --fail --silent --show-error --retry 3 --retry-all-errors \
-          --header "JOB-TOKEN: $CI_JOB_TOKEN" "$API/releases/$ENC_TAG" >/dev/null; then
-        runbook
-        echo "FATAL: tag $TAG exists on this lineage but has NO Release object — hand-pushed" >&2
-        echo "tag or half-finished rollback. Delete tag + Release together; never reuse the" >&2
-        echo "version number (a bad release is superseded, not replaced). Tag info:" >&2
-        git for-each-ref --format='%(refname:short) %(objecttype) %(taggername) %(taggerdate)' "refs/tags/$TAG" | scrub >&2
-        exit 1
+    if [ "$RECOMPUTED" = "0" ]; then
+      RECOMPUTED=1
+      if [ "$DRY" = "0" ]; then git fetch --tags --force --quiet origin; fi
+      prev_tag=$TAG
+      compute_tag
+      if [ "$TAG" != "$prev_tag" ]; then
+        # The fresh tags moved the computation (concurrent mint at an
+        # ancestor) — decide again for the NEW tag; absent means mint it.
+        tag_disposition
+        return $?
       fi
     fi
+    require_release_object
     log_no_release "at $existing, same lineage as $HEAD_SHA"
     return 0
   fi
@@ -439,12 +475,12 @@ Expected: each prints `DRY RUN (<component>) — would POST …` followed by a J
 - [ ] **Step 4: Dry-run test — no-op path (tag exists on lineage)**
 
 In the same scratch repo: `git tag -a client/v0.9.1 -m x && git tag -a v0.9.1 -m x`, then re-run both dry-run commands from Step 3.
-Expected: each prints `No release for <component>: <tag> already exists (…same lineage…)` and exits 0. (The refuse path — tag at an *unrelated* commit — is not locally constructible in a linear-history clone, since every commit is an ancestor of HEAD; that branch is covered by code review plus its backend provenance, where the same logic shipped v0.1.0–v0.2.0.)
+Expected: each prints `No release for <component>: <tag> already exists (at … = HEAD)` and exits 0. (Two branches are not locally constructible: the *refuse* path — a tag at an unrelated commit — needs non-linear history, and the *lineage recompute* path — PSR computing a tag that already exists at an ancestor — only occurs when a concurrent pipeline mints between our fetch and the disposition check, since locally PSR always sees local tags and computes past them. Both are covered by code review plus backend provenance, where the same lineage logic shipped v0.1.0–v0.2.0.)
 
 - [ ] **Step 5: Clean up scratch, commit**
 
 ```bash
-rm -rf "$SCRATCH"
+cd "$REPO_ROOT" && rm -rf "$SCRATCH"
 git add ci/release_tag.sh
 git commit -m "ci: add compute-only dual-tag minting script (backend LW-79 port)"
 ```
@@ -525,8 +561,15 @@ release:tag:
     # scan from day one.
     - {job: govulncheck, artifacts: false}
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_COMMIT_BRANCH =~ /^(hotfix|rc)\//
+    # Privilege gate (CI_COMMIT_REF_PROTECTED): this job runs repo-controlled
+    # scripts and mints protected tags via the job token, which inherits the
+    # permissions of whoever triggered — or RETRIED — the job. On an
+    # unprotected ref, any Developer push could stage script changes that a
+    # Maintainer's retry then executes with tag-minting privileges. hotfix/*
+    # and rc/* must therefore be protected branch patterns (manual
+    # prerequisites); an unprotected rc branch simply never gets the job.
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"
+    - if: $CI_COMMIT_BRANCH =~ /^(hotfix|rc)\// && $CI_COMMIT_REF_PROTECTED == "true"
   # Protects the job once started; pending jobs remain cancellable by
   # auto_cancel — acceptable: a superseding pipeline computes a superset bump.
   interruptible: false
@@ -730,19 +773,20 @@ set -a; source .env; set +a
 P="leifwind%2Fstream%2Fterraform-provider-leifwind"
 command glab api "projects/$P/variables" | jq -r '.[].key' | sort
 command glab api "projects/$P/protected_tags" | jq -r '.[].name'
+command glab api "projects/$P/protected_branches" | jq -r '.[].name'
 ```
-Expected: variables include `GPG_PRIVATE_KEY`, `GPG_PASSPHRASE`, `GPG_FINGERPRINT`, `GITHUB_MIRROR_TOKEN`; protected tags include `v*` and `client/v*`. **If anything is missing, STOP — the owner must create it (LW-68 checklist) before Step 2.** Also per LW-68: remove the stale inverse job-token allowlist entry on the backend project (backend→provider direction, added 2026-07-10).
+Expected: variables include `GPG_PRIVATE_KEY`, `GPG_PASSPHRASE`, `GPG_FINGERPRINT`, `GITHUB_MIRROR_TOKEN`; protected tags include `v*` and `client/v*`; protected branches include `main`, `hotfix/*`, and `rc/*` (without the branch patterns, `release:tag` never runs on hotfix/rc pipelines — the `CI_COMMIT_REF_PROTECTED` gate). **If anything is missing, STOP — the owner must create it (LW-68 checklist) before Step 2.** Also per LW-68: remove the stale inverse job-token allowlist entry on the backend project (backend→provider direction, added 2026-07-10).
 
 - [ ] **Step 2: Full rehearsal on an rc branch (mints real rc tags — deliberate)**
 
 ```bash
 git push origin HEAD:rc/bootstrap
 ```
-Watch the `rc/bootstrap` branch pipeline: `release:tag` must mint `client/v0.1.0-rc.1` and `v0.1.0-rc.1` (whole untagged history is bump-worthy). The `v0.1.0-rc.1` tag pipeline must then run `release`: tag pushed to GitHub, goreleaser publishes a GitHub **prerelease** with per-arch zips, `…_manifest.json`, `SHA256SUMS` + binary `.sig`. Note: `release:tag` needs no protected variables (only `CI_JOB_TOKEN`), but the *tag* pipeline does — which is why tag protection had to include rc-matching `v*`.
+(The push itself needs Maintainer rights — `rc/*` is a protected pattern per the prerequisites; that same protection is what makes the branch pipeline carry `release:tag` at all.) Watch the `rc/bootstrap` branch pipeline: `release:tag` must mint `client/v0.1.0-rc.1` and `v0.1.0-rc.1` (whole untagged history is bump-worthy). The `v0.1.0-rc.1` tag pipeline must then run `release`: tag pushed to GitHub, goreleaser publishes a GitHub **prerelease** with per-arch zips, `…_manifest.json`, `SHA256SUMS` + binary `.sig`. Note: `release:tag` needs no protected variables (only `CI_JOB_TOKEN`), but the *tag* pipeline does — which is why tag protection had to include rc-matching `v*`.
 
 - [ ] **Step 3: Rehearse the retry path (the failure you don't want to first meet on v0.1.0)**
 
-Cancel the `release` job mid-run on the rc tag pipeline, then retry it. Expected: retry completes and the GitHub release ends up complete (goreleaser re-run against an existing partial release). If the retry errors on the existing release, record the exact behavior and add `release: mode: replace` under the `release:` key in `.goreleaser.yml`, push to the MR, delete the GitHub rc release + both rc tags, and repeat Step 2.
+Cancel the `release` job mid-run on the rc tag pipeline, then retry it. Expected: retry completes and the GitHub release ends up complete (goreleaser re-run against an existing partial release). If the retry errors, record the exact failure before reaching for config — the remedies differ: a conflict over the existing release's *notes* is what `release: mode: replace` (under the `release:` key in `.goreleaser.yml`) addresses; an artifact-upload `already_exists` error is untouched by `mode` — delete the partially uploaded assets (or the whole GitHub rc release) and retry instead, and reserve goreleaser's global `retry:` settings for transient network/5xx failures. After any config change: push to the MR, delete the GitHub rc release + both rc tags, and repeat Step 2.
 
 - [ ] **Step 4: Clean up the rehearsal**
 
