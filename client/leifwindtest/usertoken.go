@@ -48,6 +48,10 @@ import (
 //     not); requested_token_type=id_token returns the full user-info-bearing
 //     token (email included, given the app's idTokenUserinfoAssertion) as
 //     the response's access_token field, which is what DecodeClaims reads.
+//
+// UserToken is safe to call any number of times for the same Org: each call
+// mints a fresh human user, and ZITADEL's 409 AlreadyExists on the
+// impersonator re-grant is tolerated (LW-110).
 func (s *Stack) UserToken(t testing.TB, org *Org) string {
 	t.Helper()
 
@@ -96,6 +100,16 @@ func (s *Stack) UserToken(t testing.TB, org *Org) string {
 		s.exchangeAppClientSecret = app.ClientSecret
 	})
 
+	// sync.Once marks itself done even when the setup func t.Fatalf's
+	// (runtime.Goexit still runs Do's deferred completion), so a failed
+	// setup would otherwise silently degrade every later UserToken call in
+	// this binary to an opaque "invalid_client" from the exchange endpoint.
+	// Fail fast and point at the real culprit instead.
+	if s.exchangeAppClientID == "" {
+		t.Fatalf("token-exchange setup failed in an earlier test on this Stack " +
+			"(sync.Once already consumed) — fix that first failure; see its log")
+	}
+
 	suffix := uuid.NewString()[:8]
 	var human struct {
 		UserID string `json:"userId"`
@@ -109,9 +123,14 @@ func (s *Stack) UserToken(t testing.TB, org *Org) string {
 		t.Fatalf("create human user: %v", err)
 	}
 
+	// Idempotency (LW-110): a second UserToken on the same Org re-grants
+	// ORG_END_USER_IMPERSONATOR to the same machine user and ZITADEL answers
+	// 409 AlreadyExists — tolerate exactly that; anything else still fails.
+	// Handled here at the grant site: mgmtDo's strict ≥400 semantics are
+	// relied on by every other caller and stay untouched.
 	if err := s.mgmtDo("POST", "/management/v1/orgs/me/members", org.ID,
 		map[string]any{"userId": org.MachineUserID,
-			"roles": []string{"ORG_END_USER_IMPERSONATOR"}}, nil); err != nil {
+			"roles": []string{"ORG_END_USER_IMPERSONATOR"}}, nil); err != nil && !isAlreadyExists(err) {
 		t.Fatalf("grant impersonator role: %v", err)
 	}
 
@@ -143,4 +162,13 @@ func (s *Stack) UserToken(t testing.TB, org *Org) string {
 		t.Fatalf("token exchange failed (status=%d): %v (oidcTokenExchange is pre-GA in ZITADEL v4.15.3 — investigate before changing the flow)", status, err)
 	}
 	return tok
+}
+
+// isAlreadyExists reports whether err is mgmtDo's formatted error for a
+// ZITADEL AlreadyExists response. mgmtDo returns "<METHOD> <path>: <status>
+// <body>", so the HTTP status is matched as text; 409 is ZITADEL's HTTP
+// mapping of gRPC AlreadyExists. Matched on status, not the body's error
+// text, which is i18n-translated.
+func isAlreadyExists(err error) bool {
+	return err != nil && strings.Contains(err.Error(), ": 409 ")
 }

@@ -74,6 +74,23 @@ data "leifwind_fields" "all" {
   pattern    = "body" # isolates from the title KEY field, see doc comment above
   depends_on = [leifwind_field.f]
 }
+
+data "leifwind_entity" "by_id" {
+  project_id = leifwind_project.p.id
+  id         = leifwind_entity.e.id
+}
+
+data "leifwind_entities" "filtered" {
+  project_id = leifwind_project.p.id
+  pattern    = "boo"
+  depends_on = [leifwind_entity.e]
+}
+
+data "leifwind_field" "by_id" {
+  project_id = leifwind_project.p.id
+  entity_id  = leifwind_entity.e.id
+  id         = leifwind_field.f.id
+}
 `
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: ProtoV6ProviderFactories(),
@@ -86,6 +103,26 @@ data "leifwind_fields" "all" {
 				resource.TestCheckResourceAttr("data.leifwind_field.by_name", "connection_type", "FRAGMENT"),
 				resource.TestCheckResourceAttr("data.leifwind_fields.all", "fields.#", "1"),
 				resource.TestCheckResourceAttr("data.leifwind_fields.all", "fields.0.data_type", "TEXT"),
+				// by-id lookups agree with the by-name blocks (covers the by-id
+				// read paths incl. keep-config-id logic; LW-109)
+				resource.TestCheckResourceAttrPair("data.leifwind_entity.by_id", "id", "data.leifwind_entity.by_name", "id"),
+				resource.TestCheckResourceAttrPair("data.leifwind_entity.by_id", "name", "data.leifwind_entity.by_name", "name"),
+				resource.TestCheckResourceAttrPair("data.leifwind_entity.by_id", "unique_key", "data.leifwind_entity.by_name", "unique_key"),
+				resource.TestCheckResourceAttrPair("data.leifwind_field.by_id", "id", "data.leifwind_field.by_name", "id"),
+				resource.TestCheckResourceAttrPair("data.leifwind_field.by_id", "name", "data.leifwind_field.by_name", "name"),
+				resource.TestCheckResourceAttrPair("data.leifwind_field.by_id", "data_type", "data.leifwind_field.by_name", "data_type"),
+				resource.TestCheckResourceAttrPair("data.leifwind_field.by_id", "connection_type", "data.leifwind_field.by_name", "connection_type"),
+				resource.TestCheckResourceAttrPair("data.leifwind_field.by_id", "fragment_name", "data.leifwind_field.by_name", "fragment_name"),
+				resource.TestCheckResourceAttrPair("data.leifwind_field.by_id", "unique_key", "data.leifwind_field.by_name", "unique_key"),
+				// one unique_key assertion per singular data source (LW-109)
+				resource.TestCheckResourceAttrPair("data.leifwind_entity.by_name", "unique_key", "leifwind_entity.e", "unique_key"),
+				resource.TestCheckResourceAttrPair("data.leifwind_field.by_name", "unique_key", "leifwind_field.f", "unique_key"),
+				// pattern-filtered entities listing (LW-109)
+				resource.TestCheckResourceAttr("data.leifwind_entities.filtered", "entities.#", "1"),
+				resource.TestCheckResourceAttr("data.leifwind_entities.filtered", "entities.0.name", "book"),
+				// FRAGMENT projection in the fields listing (fields.go:116-120; LW-109)
+				resource.TestCheckResourceAttr("data.leifwind_fields.all", "fields.0.connection_type", "FRAGMENT"),
+				resource.TestCheckResourceAttr("data.leifwind_fields.all", "fields.0.fragment_name", "content"),
 			),
 		}},
 	})
