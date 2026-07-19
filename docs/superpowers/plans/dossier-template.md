@@ -1,6 +1,6 @@
 # Dossier: hcloudgroup template patterns for terraform-provider-leifwind
 
-Source (read-only template): `/home/bbruhn/Projects/leifwind/leifwind-stream/terraform-provider-hcloudgroup`
+Source (read-only template): `terraform-provider-hcloudgroup` — sibling checkout in the `leifwind-stream` workspace, not published; module path `github.com/chickeaterbanana/terraform-provider-hcloudgroup`
 Spec: `docs/superpowers/specs/2026-07-10-lw43-terraform-provider-design.md` (LW-43, approved 2026-07-10).
 
 Every "verbatim" block below is the exact template text. "ADAPT" notes state the leifwind delta.
@@ -794,7 +794,7 @@ smoke:
 
 ## 9. go.mod — template versions (direct deps)
 
-```
+```text
 module github.com/chickeaterbanana/terraform-provider-hcloudgroup
 
 go 1.25.8
