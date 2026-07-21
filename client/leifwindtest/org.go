@@ -111,7 +111,7 @@ func (o *Org) Token(t testing.TB, s *Stack) string {
 	}
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		tok, status, err := fetchToken(s.ctx, s.Issuer, o.ClientID, o.ClientSecret, form)
+		tok, status, err := fetchToken(s.context(), s.Issuer, o.ClientID, o.ClientSecret, form)
 		if err == nil && status == http.StatusOK {
 			return tok
 		}
