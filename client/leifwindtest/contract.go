@@ -39,7 +39,7 @@ func checkContractVersion(getenv func(string) string) error {
 	version := getenv("LW_STACK_CONTRACT_VERSION")
 	if version == "" {
 		return contractErrorf(
-			"LW_TEST_* attach variables are set but LW_STACK_CONTRACT_VERSION is missing — source a stack.env written by `make stack-seed`")
+			"LW_STACK_CONTRACT_VERSION is missing from the attach environment — source a complete stack.env written by `make stack-seed`")
 	}
 	if major, _, _ := strings.Cut(version, "."); major != stackContractMajor {
 		return contractErrorf(

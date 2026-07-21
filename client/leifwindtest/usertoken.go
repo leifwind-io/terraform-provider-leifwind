@@ -136,7 +136,10 @@ func (s *Stack) ensureTokenExchange() error {
 
 // setupTokenExchange performs the one-time-per-Stack RFC 8693 prerequisites
 // (feature flag + impersonation policy + token-exchange OIDC app) and
-// stores the exchange app credentials. Caller holds exchangeMu.
+// stores the exchange app credentials. Serialized by ensureTokenExchange
+// under exchangeMu in production use; hermetic tests may call it directly
+// from a single goroutine. A retry after a partially-successful earlier
+// attempt may recreate the token-exchange app; harmless in a test stack.
 func (s *Stack) setupTokenExchange() error {
 	var features struct {
 		OidcTokenExchange struct {
