@@ -236,7 +236,7 @@ func (s *Stack) mgmtDo(method, path, orgID string, body, out any) error {
 			}
 			rdr = bytes.NewReader(b)
 		}
-		req, err := http.NewRequest(method, s.Issuer+path, rdr)
+		req, err := http.NewRequestWithContext(s.ctx, method, s.Issuer+path, rdr)
 		if err != nil {
 			return err
 		}
@@ -252,7 +252,11 @@ func (s *Stack) mgmtDo(method, path, orgID string, body, out any) error {
 		rb, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		if resp.StatusCode == 503 && time.Now().Before(deadline) {
-			time.Sleep(time.Second)
+			select {
+			case <-s.ctx.Done():
+				return s.ctx.Err()
+			case <-time.After(time.Second):
+			}
 			continue
 		}
 		if resp.StatusCode >= 400 {
