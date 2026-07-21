@@ -56,15 +56,9 @@ import (
 func (s *Stack) UserToken(t testing.TB, org *Org) string {
 	t.Helper()
 
-	s.exchangeMu.Lock()
-	if !s.exchangeReady {
-		if err := s.setupTokenExchange(); err != nil {
-			s.exchangeMu.Unlock()
-			t.Fatalf("token-exchange setup: %v", err)
-		}
-		s.exchangeReady = true
+	if err := s.ensureTokenExchange(); err != nil {
+		t.Fatalf("token-exchange setup: %v", err)
 	}
-	s.exchangeMu.Unlock()
 
 	// Reads of exchangeAppClientID/Secret below are safe: they are written
 	// only under exchangeMu, before exchangeReady flips to true.
@@ -121,6 +115,23 @@ func (s *Stack) UserToken(t testing.TB, org *Org) string {
 		t.Fatalf("token exchange failed (status=%d): %v (oidcTokenExchange is pre-GA in ZITADEL v4.15.3 — investigate before changing the flow)", status, err)
 	}
 	return tok
+}
+
+// ensureTokenExchange runs setupTokenExchange once per Stack under
+// exchangeMu, leaving exchangeReady false on failure so the next call
+// retries (LW-85). The deferred unlock keeps a panicking setup from
+// deadlocking every later UserToken call.
+func (s *Stack) ensureTokenExchange() error {
+	s.exchangeMu.Lock()
+	defer s.exchangeMu.Unlock()
+	if s.exchangeReady {
+		return nil
+	}
+	if err := s.setupTokenExchange(); err != nil {
+		return err
+	}
+	s.exchangeReady = true
+	return nil
 }
 
 // setupTokenExchange performs the one-time-per-Stack RFC 8693 prerequisites
