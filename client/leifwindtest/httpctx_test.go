@@ -16,7 +16,7 @@ import (
 func blockingServer(t *testing.T) (*httptest.Server, *Stack) {
 	t.Helper()
 	done := make(chan struct{})
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		<-done
 	}))
 	t.Cleanup(func() { close(done); srv.Close() })

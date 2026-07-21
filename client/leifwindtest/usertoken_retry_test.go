@@ -12,7 +12,7 @@ import (
 // A failed exchange setup must not poison the Stack: the next call retries.
 func TestExchangeSetupRetriesAfterFailure(t *testing.T) {
 	var calls atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		calls.Add(1)
 		http.Error(w, "boom", http.StatusInternalServerError)
 	}))
