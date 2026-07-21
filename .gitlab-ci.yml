@@ -121,6 +121,11 @@ test:acceptance:
     UV_INDEX: leifwind-backend=https://gitlab.com/api/v4/projects/84102869/packages/pypi/simple
     UV_INDEX_LEIFWIND_BACKEND_USERNAME: gitlab-ci-token
     UV_INDEX_LEIFWIND_BACKEND_PASSWORD: $CI_JOB_TOKEN
+    # !reference only pulls .leifwind-stack-backend's `script:` array, not its
+    # `variables:` map — its LEIFWIND_BACKEND_PKG_VERSION must be duplicated
+    # here or the uvicorn install spec resolves to an empty version pin
+    # ("leifwind-stream-backend[server]==", uv parse error) (LW-155 spike).
+    LEIFWIND_BACKEND_PKG_VERSION: "0.4.0"
   services:
     - !reference [.leifwind-stack, services]
   cache:
