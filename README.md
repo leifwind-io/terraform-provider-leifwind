@@ -112,7 +112,8 @@ build against the in-tree client. Pinning a release against a published
 
 - **Docker** — required for `make test` (client/toxiproxy suite) and boot-mode
   `make testacc`; attach mode instead requires a running backend stack
-  (`make -C ../backend stack-up stack-seed`).
+  (`make -C ../backend stack-up stack-seed`) — Docker is still needed once,
+  to boot that stack via compose, just not for each `make testacc` run.
 - **One-time registry login** for the private backend test image:
   `docker login registry.gitlab.com` using a personal access token with the
   `read_registry` scope.
