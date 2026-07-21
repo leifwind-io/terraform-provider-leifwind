@@ -140,6 +140,16 @@ test:acceptance:
     - !reference [.leifwind-stack-seed, script]
     - !reference [.leifwind-stack-backend, script]
     - set -a; . ./stack.env; set +a
+    # The full seed's stack.env also carries LEIFWIND_* vars (a convenience
+    # for driving `terraform` directly against the seeded stack outside our
+    # Go harness). The acctest suite builds its own explicit provider blocks
+    # from the LW_TEST_* contract (ProviderConfig/ProviderConfigM2M) — ambient
+    # LEIFWIND_TOKEN/OIDC_ISSUER/CLIENT_ID/CLIENT_SECRET env fallback would
+    # collide with a test's static `token` config ("token and
+    # issuer/client_id/client_secret are mutually exclusive"), so clear them
+    # before go test runs (LW-155 spike).
+    - unset LEIFWIND_ENDPOINT LEIFWIND_TOKEN LEIFWIND_OIDC_ISSUER
+      LEIFWIND_CLIENT_ID LEIFWIND_CLIENT_SECRET LEIFWIND_OIDC_AUDIENCE
     - TF_ACC=1 TF_ACC_PROVIDER_HOST=registry.opentofu.org
       TF_ACC_TERRAFORM_PATH=/usr/local/bin/tofu
       go test ./internal/acctest/... -v -timeout 45m
