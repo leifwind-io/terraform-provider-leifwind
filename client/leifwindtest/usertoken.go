@@ -137,7 +137,7 @@ func (s *Stack) UserToken(t testing.TB, org *Org) string {
 	// The actor token carries the full scope set: with a scopeless user_id
 	// subject, the exchange request below omits "scope" entirely and
 	// inherits the actor's scopes verbatim (Deviation 3).
-	actor, status, err := fetchToken(s.Issuer, org.ClientID, org.ClientSecret,
+	actor, status, err := fetchToken(s.ctx, s.Issuer, org.ClientID, org.ClientSecret,
 		url.Values{"grant_type": {"client_credentials"}, "scope": {strings.Join([]string{
 			"openid", "email",
 			"urn:zitadel:iam:user:resourceowner",
@@ -157,7 +157,7 @@ func (s *Stack) UserToken(t testing.TB, org *Org) string {
 		// that actually carries the email claim in v4.15.3.
 		"requested_token_type": {"urn:ietf:params:oauth:token-type:id_token"},
 	}
-	tok, status, err := fetchToken(s.Issuer, s.exchangeAppClientID, s.exchangeAppClientSecret, form)
+	tok, status, err := fetchToken(s.ctx, s.Issuer, s.exchangeAppClientID, s.exchangeAppClientSecret, form)
 	if err != nil || status != 200 {
 		t.Fatalf("token exchange failed (status=%d): %v (oidcTokenExchange is pre-GA in ZITADEL v4.15.3 — investigate before changing the flow)", status, err)
 	}
