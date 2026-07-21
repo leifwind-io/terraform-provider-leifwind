@@ -58,13 +58,14 @@ type Stack struct {
 	backendProxy *toxiproxy.Proxy
 	teardown     []func()
 
-	// exchangeSetup and exchangeApp* back UserToken's one-time-per-Stack RFC
-	// 8693 setup (feature flag + impersonation policy + token-exchange OIDC
-	// app). Per-Stack, not package-level: each Stack is its own ZITADEL
-	// instance/project, so a process-wide sync.Once would silently reuse a
-	// previous (possibly torn-down) Stack's app credentials for any second
-	// Stack in the same test binary.
-	exchangeSetup           sync.Once
+	// exchangeMu/exchangeReady and exchangeApp* back UserToken's
+	// one-time-per-Stack RFC 8693 setup (feature flag + impersonation policy
+	// + token-exchange OIDC app). Per-Stack, not package-level: each Stack is
+	// its own ZITADEL instance/project. A mutex + flag instead of sync.Once:
+	// a FAILED setup must not poison the Stack — the next UserToken call
+	// retries (LW-85).
+	exchangeMu              sync.Mutex
+	exchangeReady           bool
 	exchangeAppClientID     string
 	exchangeAppClientSecret string
 }
