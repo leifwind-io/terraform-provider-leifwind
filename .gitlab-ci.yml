@@ -4,6 +4,9 @@
 include:
   - template: Jobs/SAST.gitlab-ci.yml
   - template: Jobs/Secret-Detection.gitlab-ci.yml
+  - project: leifwind/stream/backend
+    ref: main
+    file: ci/leifwind-stack.gitlab-ci.yml
 
 stages: [lint, test, release]
 
@@ -102,13 +105,70 @@ test:client:
     # -p 1: toxiproxy fault-injection tests race under cross-package parallelism (two docker stacks)
     - cd client && go test ./... -v -timeout 30m -p 1
 
+# Per-MR: attach mode against GitLab services — no DinD; ZITADEL boots in
+# parallel with the tofu/uv installs (LW-155). Boot mode lives on in
+# test:acceptance:boot below and stays the local default.
 test:acceptance:
+  stage: test
+  image: $GO_IMAGE
+  needs: []
+  variables:
+    # Per-build network: service-to-service DNS (zitadel -> zitadel-db) and
+    # stable aliases from the build container.
+    FF_NETWORK_PER_BUILD: "true"
+    # Private index for the published backend package (see backend
+    # docs/stack.md; our CI_JOB_TOKEN is allowlisted on the backend project).
+    UV_INDEX: leifwind-backend=https://gitlab.com/api/v4/projects/84102869/packages/pypi/simple
+    UV_INDEX_LEIFWIND_BACKEND_USERNAME: gitlab-ci-token
+    UV_INDEX_LEIFWIND_BACKEND_PASSWORD: $CI_JOB_TOKEN
+  services:
+    - !reference [.leifwind-stack, services]
+  cache:
+    - *go-cache
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq unzip libpq5 curl ca-certificates
+    - curl -fsSL https://github.com/opentofu/opentofu/releases/download/v1.10.0/tofu_1.10.0_linux_amd64.zip -o /tmp/tofu.zip
+    # Official checksum from the release's tofu_1.10.0_SHA256SUMS.
+    - echo "ff8aebfd069f15f3f9ba7814444c8cae05428314c2ded0faedb9d040f6936cdb  /tmp/tofu.zip" | sha256sum -c -
+    - unzip -o /tmp/tofu.zip -d /usr/local/bin tofu
+    # Pinned installer version (matches backend docs/stack.md).
+    - curl -LsSf https://astral.sh/uv/0.11.26/install.sh | sh
+    - export PATH="$HOME/.local/bin:$PATH"
+  script:
+    - !reference [.leifwind-stack-seed, script]
+    - !reference [.leifwind-stack-backend, script]
+    - set -a; . ./stack.env; set +a
+    # The full seed's stack.env also carries LEIFWIND_* vars (a convenience
+    # for driving `terraform` directly against the seeded stack outside our
+    # Go harness). The acctest suite builds its own explicit provider blocks
+    # from the LW_TEST_* contract (ProviderConfig/ProviderConfigM2M) — ambient
+    # LEIFWIND_TOKEN/OIDC_ISSUER/CLIENT_ID/CLIENT_SECRET env fallback would
+    # collide with a test's static `token` config ("token and
+    # issuer/client_id/client_secret are mutually exclusive"), so clear them
+    # before go test runs (LW-155 spike).
+    - unset LEIFWIND_ENDPOINT LEIFWIND_TOKEN LEIFWIND_OIDC_ISSUER
+      LEIFWIND_CLIENT_ID LEIFWIND_CLIENT_SECRET LEIFWIND_OIDC_AUDIENCE
+    - TF_ACC=1 TF_ACC_PROVIDER_HOST=registry.opentofu.org
+      TF_ACC_TERRAFORM_PATH=/usr/local/bin/tofu
+      go test ./internal/acctest/... -v -timeout 45m
+
+# Boot mode kept alive so it can't rot (same reasoning as the backend's
+# test:boot, LW-152): full suite incl. the dedicated Start(t) tests that
+# attach mode skips (instance-wide OIDC settings). Scheduled + manual.
+test:acceptance:boot:
   stage: test
   <<: *containers
   needs: []
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+      allow_failure: true
   script:
     - apt-get update -qq && apt-get install -y -qq unzip
     - curl -fsSL https://github.com/opentofu/opentofu/releases/download/v1.10.0/tofu_1.10.0_linux_amd64.zip -o /tmp/tofu.zip
+    # Official checksum from the release's tofu_1.10.0_SHA256SUMS.
+    - echo "ff8aebfd069f15f3f9ba7814444c8cae05428314c2ded0faedb9d040f6936cdb  /tmp/tofu.zip" | sha256sum -c -
     - unzip -o /tmp/tofu.zip -d /usr/local/bin tofu
     - TF_ACC=1 TF_ACC_PROVIDER_HOST=registry.opentofu.org
       TF_ACC_TERRAFORM_PATH=/usr/local/bin/tofu

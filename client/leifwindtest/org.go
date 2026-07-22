@@ -3,6 +3,7 @@
 package leifwindtest
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -110,7 +111,7 @@ func (o *Org) Token(t testing.TB, s *Stack) string {
 	}
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		tok, status, err := fetchToken(s.Issuer, o.ClientID, o.ClientSecret, form)
+		tok, status, err := fetchToken(s.context(), s.Issuer, o.ClientID, o.ClientSecret, form)
 		if err == nil && status == http.StatusOK {
 			return tok
 		}
@@ -125,8 +126,8 @@ func (o *Org) Token(t testing.TB, s *Stack) string {
 	}
 }
 
-func fetchToken(issuer, clientID, clientSecret string, form url.Values) (string, int, error) {
-	req, err := http.NewRequest("POST", issuer+"/oauth/v2/token",
+func fetchToken(ctx context.Context, issuer, clientID, clientSecret string, form url.Values) (string, int, error) {
+	req, err := http.NewRequestWithContext(ctx, "POST", issuer+"/oauth/v2/token",
 		strings.NewReader(form.Encode()))
 	if err != nil {
 		return "", 0, err

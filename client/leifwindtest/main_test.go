@@ -4,33 +4,40 @@ package leifwindtest
 
 import (
 	"os"
+	"sync"
 	"testing"
 )
 
-// One shared stack for ALL tests in this package (perf: each Start(t) boot
-// costs ~60-90s of containers; tests already isolate via per-test orgs, so
-// they share one stack the same way the client and acctest packages do).
+// The package shares one booted stack across tests (each boot costs ~60-90s).
+// Boot is lazy: hermetic tests (contract/attach unit tests) must run without
+// Docker, so the stack boots on the first sharedStack call, not in TestMain.
+// Tests that exercise the stack already isolate via per-test orgs (see
+// NewOrg), so sharing one stack here is safe — the same pattern the client
+// and acctest packages use.
 var (
-	mainStack    *Stack
-	mainStackErr error
+	mainOnce    sync.Once
+	mainStack   *Stack
+	mainCleanup func()
+	mainErr     error
 )
 
-func TestMain(m *testing.M) {
-	var cleanup func()
-	mainStack, cleanup, mainStackErr = StartMain()
-	code := m.Run()
-	if cleanup != nil {
-		cleanup()
-	}
-	os.Exit(code)
-}
-
-// sharedStack returns the package-shared stack, failing the test if the
-// TestMain boot failed.
+// sharedStack returns the package-shared stack, booting it on first use; it
+// fails the test if the boot failed.
 func sharedStack(t testing.TB) *Stack {
 	t.Helper()
-	if mainStackErr != nil {
-		t.Fatalf("shared stack boot failed: %v", mainStackErr)
+	mainOnce.Do(func() {
+		mainStack, mainCleanup, mainErr = StartMain()
+	})
+	if mainErr != nil {
+		t.Fatalf("shared stack boot: %v", mainErr)
 	}
 	return mainStack
+}
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if mainCleanup != nil {
+		mainCleanup()
+	}
+	os.Exit(code)
 }

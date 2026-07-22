@@ -22,7 +22,23 @@ var (
 	orgMu         sync.Mutex
 )
 
+// attachMode reports whether the LW_TEST_* attach contract is in the
+// environment (a sourced stack.env) — the same dispatch key the backend's
+// Python fixtures use. Attach: shared long-lived stack, seconds per run.
+// Boot: testcontainers, the local default.
+func attachMode() bool {
+	return os.Getenv("LW_TEST_ZITADEL_ISSUER_URL") != ""
+}
+
 func startShared() error {
+	if attachMode() {
+		s, cleanup, err := leifwindtest.AttachMain()
+		if err != nil {
+			return err
+		}
+		shared, sharedCleanup = s, cleanup
+		return nil
+	}
 	var err error
 	shared, sharedCleanup, err = leifwindtest.StartMain()
 	return err

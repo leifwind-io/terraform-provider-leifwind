@@ -110,8 +110,10 @@ build against the in-tree client. Pinning a release against a published
 
 ### Local prerequisites
 
-- **Docker** — the client and acceptance test suites boot a real stack
-  (ZITADEL + the leifwind backend + PostgreSQL) via testcontainers.
+- **Docker** — required for `make test` (client/toxiproxy suite) and boot-mode
+  `make testacc`; attach mode instead requires a running backend stack
+  (`make -C ../backend stack-up stack-seed`) — Docker is still needed once,
+  to boot that stack via compose, just not for each `make testacc` run.
 - **One-time registry login** for the private backend test image:
   `docker login registry.gitlab.com` using a personal access token with the
   `read_registry` scope.
@@ -128,6 +130,36 @@ make testacc  # provider acceptance suite (TF_ACC=1, against tofu)
 make docs     # regenerate docs/ from examples/ via tfplugindocs
 make tidy     # go mod tidy, both modules
 ```
+
+### Fast acceptance iteration: attach mode
+
+The acceptance suite has two ways to get a stack. **Boot mode** (default):
+`leifwindtest` boots ZITADEL + backend + Postgres via testcontainers on every
+run — hermetic, needs Docker, costs ~60-90 s per package. **Attach mode**:
+tests attach to an already-running stack via the `LW_TEST_*` environment
+contract (`stack.env`), dropping the per-run cost to seconds.
+
+```bash
+# once: boot + seed the shared stack from the backend repo
+make -C ../backend stack-up stack-seed
+
+# per iteration
+set -a; . ../backend/stack.env; set +a
+make testacc
+```
+
+The dispatch is automatic: when `LW_TEST_ZITADEL_ISSUER_URL` is set (i.e.
+stack.env is sourced), the suite attaches; otherwise it boots containers.
+`leifwindtest.Attach()` fails fast with a contract error if `stack.env` is
+incomplete or its `LW_STACK_CONTRACT_VERSION` major differs from the one the
+package speaks (currently 1).
+
+Not everything attaches: tests that mutate instance-wide ZITADEL state (and
+anything using `WithToxiproxy`) need a dedicated booted stack and skip in
+attach mode — CI runs them in the scheduled `test:acceptance:boot` job. In
+per-MR CI, `test:acceptance` runs in attach mode against GitLab `services:`
+(no Docker-in-Docker); see `.gitlab-ci.yml` and the backend's
+`docs/stack.md` for the `.leifwind-stack` template contract.
 
 ### GitLab primary, GitHub mirror
 

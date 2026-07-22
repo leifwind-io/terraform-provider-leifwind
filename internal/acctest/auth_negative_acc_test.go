@@ -167,6 +167,12 @@ resource "leifwind_entity" "e" {
 // now-provably-rejected token.
 func TestAccExpiredToken(t *testing.T) {
 	PreCheck(t)
+	if attachMode() {
+		// SetAccessTokenLifetime is instance-wide: unsafe against a shared
+		// attached instance, and Start(t) needs Docker which the attach-mode
+		// CI job doesn't have. Runs in test:acceptance:boot instead.
+		t.Skip("needs a dedicated boot stack; covered by test:acceptance:boot")
+	}
 	t.Parallel() // dedicated-stack boot + expiry poll overlap the shared-stack tests
 	s := leifwindtest.Start(t)
 	s.SetAccessTokenLifetime(t, 5*time.Second)

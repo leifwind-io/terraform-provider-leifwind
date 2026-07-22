@@ -4,6 +4,7 @@ package leifwindtest
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -223,9 +224,19 @@ func (s *Stack) waitForPAT() (string, error) {
 	}
 }
 
+// context returns the stack's context, tolerating zero-value Stacks built
+// directly by hermetic tests (nil ctx would make NewRequestWithContext error).
+func (s *Stack) context() context.Context {
+	if s.ctx == nil {
+		return context.Background()
+	}
+	return s.ctx
+}
+
 // mgmtDo calls a ZITADEL management/v2 API with the bootstrap PAT,
 // retrying 503 for ~30s (the query side settles after 'ready').
 func (s *Stack) mgmtDo(method, path, orgID string, body, out any) error {
+	ctx := s.context()
 	deadline := time.Now().Add(30 * time.Second)
 	for {
 		var rdr io.Reader
@@ -236,7 +247,7 @@ func (s *Stack) mgmtDo(method, path, orgID string, body, out any) error {
 			}
 			rdr = bytes.NewReader(b)
 		}
-		req, err := http.NewRequest(method, s.Issuer+path, rdr)
+		req, err := http.NewRequestWithContext(ctx, method, s.Issuer+path, rdr)
 		if err != nil {
 			return err
 		}
@@ -252,7 +263,11 @@ func (s *Stack) mgmtDo(method, path, orgID string, body, out any) error {
 		rb, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		if resp.StatusCode == 503 && time.Now().Before(deadline) {
-			time.Sleep(time.Second)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second):
+			}
 			continue
 		}
 		if resp.StatusCode >= 400 {

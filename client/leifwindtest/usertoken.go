@@ -3,6 +3,7 @@
 package leifwindtest
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -29,10 +30,10 @@ import (
 //     client_id/secret can never authenticate the exchange call itself
 //     ("invalid_client: no active client not found"); a confidential OIDC
 //     Web app with grantTypes including OIDC_GRANT_TYPE_TOKEN_EXCHANGE is
-//     required (created once per Stack via s.exchangeSetup, reused across
-//     orgs since it lives in the shared s.Audience project — see Stack's
-//     exchangeSetup field doc for why this is per-Stack, not
-//     package-level). The actor (machine user, holding
+//     required (created once per Stack via s.setupTokenExchange, reused
+//     across orgs since it lives in the shared s.Audience project — see
+//     Stack's exchangeMu/exchangeReady field doc for why this is per-Stack,
+//     not package-level). The actor (machine user, holding
 //     ORG_END_USER_IMPERSONATOR) is unaffected — it still supplies the
 //     actor_token.
 //  3. In v4.15.3, validateTokenExchangeScopes (internal/api/oidc/
@@ -55,60 +56,12 @@ import (
 func (s *Stack) UserToken(t testing.TB, org *Org) string {
 	t.Helper()
 
-	s.exchangeSetup.Do(func() {
-		var features struct {
-			OidcTokenExchange struct {
-				Enabled bool `json:"enabled"`
-			} `json:"oidcTokenExchange"`
-		}
-		if err := s.mgmtDo("GET", "/v2/features/instance", "", nil, &features); err != nil {
-			t.Fatalf("get instance features: %v", err)
-		}
-		if !features.OidcTokenExchange.Enabled {
-			if err := s.mgmtDo("PUT", "/v2/features/instance", "",
-				map[string]any{"oidcTokenExchange": true}, nil); err != nil {
-				t.Fatalf("enable oidc_token_exchange: %v", err)
-			}
-		}
-		if err := s.mgmtDo("PUT", "/admin/v1/policies/security", "",
-			map[string]any{"enableImpersonation": true}, nil); err != nil {
-			t.Fatalf("enable impersonation: %v", err)
-		}
-
-		// Confidential OIDC app to authenticate the exchange call (see
-		// Deviation 2 above). responseTypes/grantTypes must include the
-		// authorization_code pair: ZITADEL's OIDCApp.IsValid derives
-		// "required" grant types from responseTypes and rejects the app
-		// otherwise, even though we never use that flow.
-		var app struct {
-			ClientID     string `json:"clientId"`
-			ClientSecret string `json:"clientSecret"`
-		}
-		if err := s.mgmtDo("POST", "/management/v1/projects/"+s.Audience+"/apps/oidc", "",
-			map[string]any{
-				"name":                     "leifwindtest-token-exchange",
-				"appType":                  "OIDC_APP_TYPE_WEB",
-				"authMethodType":           "OIDC_AUTH_METHOD_TYPE_BASIC",
-				"responseTypes":            []string{"OIDC_RESPONSE_TYPE_CODE"},
-				"grantTypes":               []string{"OIDC_GRANT_TYPE_AUTHORIZATION_CODE", "OIDC_GRANT_TYPE_TOKEN_EXCHANGE"},
-				"redirectUris":             []string{"http://localhost/callback"},
-				"idTokenUserinfoAssertion": true,
-			}, &app); err != nil {
-			t.Fatalf("create token-exchange app: %v", err)
-		}
-		s.exchangeAppClientID = app.ClientID
-		s.exchangeAppClientSecret = app.ClientSecret
-	})
-
-	// sync.Once marks itself done even when the setup func t.Fatalf's
-	// (runtime.Goexit still runs Do's deferred completion), so a failed
-	// setup would otherwise silently degrade every later UserToken call in
-	// this binary to an opaque "invalid_client" from the exchange endpoint.
-	// Fail fast and point at the real culprit instead.
-	if s.exchangeAppClientID == "" {
-		t.Fatalf("token-exchange setup failed in an earlier test on this Stack " +
-			"(sync.Once already consumed) — fix that first failure; see its log")
+	if err := s.ensureTokenExchange(); err != nil {
+		t.Fatalf("token-exchange setup: %v", err)
 	}
+
+	// Reads of exchangeAppClientID/Secret below are safe: they are written
+	// only under exchangeMu, before exchangeReady flips to true.
 
 	suffix := uuid.NewString()[:8]
 	var human struct {
@@ -137,7 +90,7 @@ func (s *Stack) UserToken(t testing.TB, org *Org) string {
 	// The actor token carries the full scope set: with a scopeless user_id
 	// subject, the exchange request below omits "scope" entirely and
 	// inherits the actor's scopes verbatim (Deviation 3).
-	actor, status, err := fetchToken(s.Issuer, org.ClientID, org.ClientSecret,
+	actor, status, err := fetchToken(s.context(), s.Issuer, org.ClientID, org.ClientSecret,
 		url.Values{"grant_type": {"client_credentials"}, "scope": {strings.Join([]string{
 			"openid", "email",
 			"urn:zitadel:iam:user:resourceowner",
@@ -157,11 +110,80 @@ func (s *Stack) UserToken(t testing.TB, org *Org) string {
 		// that actually carries the email claim in v4.15.3.
 		"requested_token_type": {"urn:ietf:params:oauth:token-type:id_token"},
 	}
-	tok, status, err := fetchToken(s.Issuer, s.exchangeAppClientID, s.exchangeAppClientSecret, form)
+	tok, status, err := fetchToken(s.context(), s.Issuer, s.exchangeAppClientID, s.exchangeAppClientSecret, form)
 	if err != nil || status != 200 {
 		t.Fatalf("token exchange failed (status=%d): %v (oidcTokenExchange is pre-GA in ZITADEL v4.15.3 — investigate before changing the flow)", status, err)
 	}
 	return tok
+}
+
+// ensureTokenExchange runs setupTokenExchange once per Stack under
+// exchangeMu, leaving exchangeReady false on failure so the next call
+// retries (LW-85). The deferred unlock keeps a panicking setup from
+// deadlocking every later UserToken call.
+func (s *Stack) ensureTokenExchange() error {
+	s.exchangeMu.Lock()
+	defer s.exchangeMu.Unlock()
+	if s.exchangeReady {
+		return nil
+	}
+	if err := s.setupTokenExchange(); err != nil {
+		return err
+	}
+	s.exchangeReady = true
+	return nil
+}
+
+// setupTokenExchange performs the one-time-per-Stack RFC 8693 prerequisites
+// (feature flag + impersonation policy + token-exchange OIDC app) and
+// stores the exchange app credentials. Serialized by ensureTokenExchange
+// under exchangeMu in production use; hermetic tests may call it directly
+// from a single goroutine. A retry after a partially-successful earlier
+// attempt may recreate the token-exchange app; harmless in a test stack.
+func (s *Stack) setupTokenExchange() error {
+	var features struct {
+		OidcTokenExchange struct {
+			Enabled bool `json:"enabled"`
+		} `json:"oidcTokenExchange"`
+	}
+	if err := s.mgmtDo("GET", "/v2/features/instance", "", nil, &features); err != nil {
+		return fmt.Errorf("get instance features: %w", err)
+	}
+	if !features.OidcTokenExchange.Enabled {
+		if err := s.mgmtDo("PUT", "/v2/features/instance", "",
+			map[string]any{"oidcTokenExchange": true}, nil); err != nil {
+			return fmt.Errorf("enable oidc_token_exchange: %w", err)
+		}
+	}
+	if err := s.mgmtDo("PUT", "/admin/v1/policies/security", "",
+		map[string]any{"enableImpersonation": true}, nil); err != nil {
+		return fmt.Errorf("enable impersonation: %w", err)
+	}
+
+	// Confidential OIDC app to authenticate the exchange call (see
+	// Deviation 2 above). responseTypes/grantTypes must include the
+	// authorization_code pair: ZITADEL's OIDCApp.IsValid derives
+	// "required" grant types from responseTypes and rejects the app
+	// otherwise, even though we never use that flow.
+	var app struct {
+		ClientID     string `json:"clientId"`
+		ClientSecret string `json:"clientSecret"`
+	}
+	if err := s.mgmtDo("POST", "/management/v1/projects/"+s.Audience+"/apps/oidc", "",
+		map[string]any{
+			"name":                     "leifwindtest-token-exchange",
+			"appType":                  "OIDC_APP_TYPE_WEB",
+			"authMethodType":           "OIDC_AUTH_METHOD_TYPE_BASIC",
+			"responseTypes":            []string{"OIDC_RESPONSE_TYPE_CODE"},
+			"grantTypes":               []string{"OIDC_GRANT_TYPE_AUTHORIZATION_CODE", "OIDC_GRANT_TYPE_TOKEN_EXCHANGE"},
+			"redirectUris":             []string{"http://localhost/callback"},
+			"idTokenUserinfoAssertion": true,
+		}, &app); err != nil {
+		return fmt.Errorf("create token-exchange app: %w", err)
+	}
+	s.exchangeAppClientID = app.ClientID
+	s.exchangeAppClientSecret = app.ClientSecret
+	return nil
 }
 
 // isAlreadyExists reports whether err is mgmtDo's formatted error for a
