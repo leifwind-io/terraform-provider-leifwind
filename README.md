@@ -139,12 +139,14 @@ run — hermetic, needs Docker, costs ~60-90 s per package. **Attach mode**:
 tests attach to an already-running stack via the `LW_TEST_*` environment
 contract (`stack.env`), dropping the per-run cost to seconds.
 
-    # once: boot + seed the shared stack from the backend repo
-    make -C ../backend stack-up stack-seed
+```bash
+# once: boot + seed the shared stack from the backend repo
+make -C ../backend stack-up stack-seed
 
-    # per iteration
-    set -a; . ../backend/stack.env; set +a
-    make testacc
+# per iteration
+set -a; . ../backend/stack.env; set +a
+make testacc
+```
 
 The dispatch is automatic: when `LW_TEST_ZITADEL_ISSUER_URL` is set (i.e.
 stack.env is sourced), the suite attaches; otherwise it boots containers.
