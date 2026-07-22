@@ -25,15 +25,18 @@ func TestExchangeSetupRetriesAfterFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := s.setupTokenExchange(); err == nil {
+	if err := s.ensureTokenExchange(); err == nil {
 		t.Fatal("first setup against a 500-ing server must fail")
 	}
+	if s.exchangeReady {
+		t.Fatal("exchangeReady must stay false after a failed setup")
+	}
 	after := calls.Load()
-	if err := s.setupTokenExchange(); err == nil {
+	if err := s.ensureTokenExchange(); err == nil {
 		t.Fatal("second setup must also fail")
 	}
 	if calls.Load() == after {
-		t.Fatal("second setup made no HTTP calls — sync.Once poisoning is back")
+		t.Fatal("second call made no HTTP calls — sync.Once poisoning is back")
 	}
 	if s.exchangeReady {
 		t.Fatal("exchangeReady must stay false after failures")
