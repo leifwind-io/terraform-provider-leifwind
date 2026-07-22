@@ -128,8 +128,11 @@ test:acceptance:
   before_script:
     - apt-get update -qq && apt-get install -y -qq unzip libpq5 curl ca-certificates
     - curl -fsSL https://github.com/opentofu/opentofu/releases/download/v1.10.0/tofu_1.10.0_linux_amd64.zip -o /tmp/tofu.zip
+    # Official checksum from the release's tofu_1.10.0_SHA256SUMS.
+    - echo "ff8aebfd069f15f3f9ba7814444c8cae05428314c2ded0faedb9d040f6936cdb  /tmp/tofu.zip" | sha256sum -c -
     - unzip -o /tmp/tofu.zip -d /usr/local/bin tofu
-    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    # Pinned installer version (matches backend docs/stack.md).
+    - curl -LsSf https://astral.sh/uv/0.11.26/install.sh | sh
     - export PATH="$HOME/.local/bin:$PATH"
   script:
     - !reference [.leifwind-stack-seed, script]
@@ -164,6 +167,8 @@ test:acceptance:boot:
   script:
     - apt-get update -qq && apt-get install -y -qq unzip
     - curl -fsSL https://github.com/opentofu/opentofu/releases/download/v1.10.0/tofu_1.10.0_linux_amd64.zip -o /tmp/tofu.zip
+    # Official checksum from the release's tofu_1.10.0_SHA256SUMS.
+    - echo "ff8aebfd069f15f3f9ba7814444c8cae05428314c2ded0faedb9d040f6936cdb  /tmp/tofu.zip" | sha256sum -c -
     - unzip -o /tmp/tofu.zip -d /usr/local/bin tofu
     - TF_ACC=1 TF_ACC_PROVIDER_HOST=registry.opentofu.org
       TF_ACC_TERRAFORM_PATH=/usr/local/bin/tofu
