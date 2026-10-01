@@ -9,10 +9,10 @@ metadata objects against a running leifwind backend.
 
 Registry source address: **`leifwind-io/leifwind`**.
 
-This repository also ships a standalone, importable Go client
-(`./client`) with zero `terraform-plugin-*` dependencies — see
-[`client/README.md`](client/README.md) if you want to talk to the metadata
-API from your own Go code without Terraform.
+The provider is built on a standalone, importable Go client
+(`github.com/leifwind-io/leifwind-go`) with zero `terraform-plugin-*`
+dependencies — see [`../go-client/README.md`](../go-client/README.md) if you
+want to talk to the metadata API from your own Go code without Terraform.
 
 ## Install
 
@@ -83,53 +83,41 @@ Complete attribute reference: [`docs/index.md`](docs/index.md).
 
 ## Development
 
-This is a two-module Go workspace:
-
-- `.` — the provider itself, built on `terraform-plugin-framework`.
-- `./client` — a standalone Go client for the metadata API (no
-  `terraform-plugin-*` dependencies), tagged and released independently as
-  `client/vX.Y.Z`.
-
-A committed `go.work` ties the two together for local development and CI so
-that the provider always builds against the client's working-tree copy:
-
-```
-go 1.25.8
-
-use (
-	.
-	./client
-)
-```
-
-Release builds run with `GOWORK=off`, but the root `go.mod`'s
-`replace …/client => ./client` directive still applies, so releases always
-build against the in-tree client. Pinning a release against a published
-`client/vX.Y.Z` tag additionally requires removing (or conditioning) that
-`replace` directive — tracked in **internal** (see Release, below).
+The provider is one package of the leifwind monorepo, next to the Go client
+it is built on (`../go-client`). The monorepo's root `go.work` uses both
+modules, and the provider's `go.mod` has a
+`replace github.com/leifwind-io/leifwind-go => ../go-client` directive, so the
+provider always builds against the client's working-tree copy. The
+`replace` goes once the client is published on its own.
 
 ### Local prerequisites
 
-- **Docker** — required for `make test` (client/toxiproxy suite) and boot-mode
-  `make testacc`; attach mode instead requires a running backend stack
-  (`make -C ../backend stack-up stack-seed`) — Docker is still needed once,
-  to boot that stack via compose, just not for each `make testacc` run.
+- **Docker** — required for `just test-go-client` (client/toxiproxy suite)
+  and boot-mode `just test-provider-acceptance`; attach mode instead requires
+  a running backend stack (`make stack-up stack-seed` at the monorepo root) —
+  Docker is still needed once, to boot that stack via compose, just not for
+  each acceptance run.
 - **One-time registry login** for the private backend test image:
   `docker login registry.example.invalid` using a personal access token with the
   `read_registry` scope.
-- **Go ≥ 1.25**.
+- **Go ≥ 1.26**.
 - **`tofu`** (OpenTofu CLI) on `PATH` — the acceptance suite drives real
   `plan`/`apply`/`destroy` cycles through it.
 
 ### Common tasks
 
+Run from the monorepo root:
+
 ```bash
-make lint     # golangci-lint, both modules
-make test     # client module's full test suite (testcontainers, -p 1)
-make testacc  # provider acceptance suite (TF_ACC=1, against tofu)
-make docs     # regenerate docs/ from examples/ via tfplugindocs
-make tidy     # go mod tidy, both modules
+just test-provider             # provider unit tests (no Docker)
+just test-go-client            # client module's full test suite (testcontainers, -p 1)
+just test-provider-acceptance  # provider acceptance suite (TF_ACC=1, against tofu)
+just provider-docs             # regenerate docs/ from examples/ via tfplugindocs
+just go-tidy                   # go mod tidy, both modules
 ```
+
+golangci-lint runs in CI (`provider:lint`, `go-client:lint`) with each
+package's `.golangci.yml`.
 
 ### Fast acceptance iteration: attach mode
 
@@ -140,13 +128,16 @@ tests attach to an already-running stack via the `LW_TEST_*` environment
 contract (`stack.env`), dropping the per-run cost to seconds.
 
 ```bash
-# once: boot + seed the shared stack from the backend repo
-make -C ../backend stack-up stack-seed
+# once, at the monorepo root: boot + seed the shared stack
+make stack-up stack-seed
 
-# per iteration
-set -a; . ../backend/stack.env; set +a
-make testacc
+# per iteration (the recipe sources the root stack.env)
+just test-provider-acceptance
 ```
+
+The tests create fixed project names and change instance-wide settings, so a
+second run needs a freshly seeded stack (`make stack-reset stack-up
+stack-seed`).
 
 The dispatch is automatic: when `LW_TEST_ZITADEL_ISSUER_URL` is set (i.e.
 stack.env is sourced), the suite attaches; otherwise it boots containers.
@@ -156,43 +147,25 @@ package speaks (currently 1).
 
 Not everything attaches: tests that mutate instance-wide ZITADEL state (and
 anything using `WithToxiproxy`) need a dedicated booted stack and skip in
-attach mode — CI runs them in the scheduled `test:acceptance:boot` job. In
-per-MR CI, `test:acceptance` runs in attach mode against GitLab `services:`
-(no Docker-in-Docker); see `.internal` and the backend's
-`docs/stack.md` for the `.leifwind-stack` template contract.
+attach mode — CI runs them in the scheduled `provider:test-acceptance-boot`
+job. In per-MR CI, `provider:test-acceptance` runs in attach mode against
+GitLab `services:` and the monorepo's own backend (no Docker-in-Docker); see
+`ci/provider.yml` and `docs/stack.md` for the `.leifwind-stack` template
+contract.
 
-### GitLab primary, GitHub mirror
+### Monorepo primary, GitHub mirror
 
-Development, code review, and CI all live on GitLab
-(`github.com/leifwind-io/terraform-provider-leifwind`) alongside the rest
-of the leifwind backend. A push mirror keeps
-`github.com/leifwind-io/terraform-provider-leifwind` in sync, because both
-the Terraform Registry and the OpenTofu Registry resolve providers from
-public GitHub repositories and GitHub Releases. The GitHub mirror runs no CI
-of its own — it exists purely for distribution. The release job explicitly
-pushes the release tag to GitHub before invoking `goreleaser`, to avoid
-racing the mirror's sync lag against registry ingestion.
+Development, code review, and CI live in the private leifwind monorepo.
+`github.com/leifwind-io/terraform-provider-leifwind` is its public, read-only
+mirror, because both the Terraform Registry and the OpenTofu Registry resolve
+providers from public GitHub repositories and GitHub Releases. The mirror
+runs no CI of its own — it exists purely for distribution.
 
 ## Release
 
-Releases are cut by pushing tags, in this order:
-
-1. `client/vX.Y.Z` — tags the client module. CI runs lint + test only; module
-   tags need no build artifacts (the mirror syncs the tag).
-2. `vX.Y.Z` — tags the provider. On a protected `v*` tag, GitLab CI:
-   - imports the release GPG key,
-   - pushes the tag to the GitHub mirror,
-   - runs `GOWORK=off goreleaser release --clean`, building and signing
-     cross-platform archives and publishing a GitHub Release (which both
-     registries index).
-
-Bump the provider's `go.mod` client dependency to the new `client/vX.Y.Z`
-before tagging the provider. Note that until the `replace …/client => ./client`
-directive is removed or conditioned (internal), release builds still use the
-in-tree client regardless of that pin.
-
-First-release/registry-onboarding steps (Terraform/OpenTofu Registry
-onboarding, flipping the client dependency off its dev-time placeholder pin,
-and proving the `GOWORK=off` release build end-to-end) are one-time setup
-tracked separately in **internal** — not part of this repository's day-to-day
-release flow.
+The monorepo's release pipeline cuts provider releases from `provider/vX.Y.Z`
+tags, after the Go client version the provider requires is published: it
+pushes the scrubbed history and the plain `vX.Y.Z` tag to the mirror, then
+runs goreleaser there, which builds and GPG-signs the cross-platform archives
+and publishes the GitHub Release both registries index. That pipeline does
+not exist yet; until it does, the provider is not released.
