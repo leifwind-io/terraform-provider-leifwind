@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/leifwind-io/leifwind-go"
+	client "github.com/leifwind-io/leifwind-go"
 )
 
 // ProjectByName resolves a project by EXACT name (the server pattern

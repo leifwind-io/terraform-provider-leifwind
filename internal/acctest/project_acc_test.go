@@ -9,8 +9,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
-
-	"github.com/leifwind-io/leifwind-go"
+	client "github.com/leifwind-io/leifwind-go"
 )
 
 func TestAccProjectLifecycle(t *testing.T) {

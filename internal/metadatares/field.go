@@ -19,7 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/leifwind-io/leifwind-go"
+	client "github.com/leifwind-io/leifwind-go"
 	"github.com/leifwind-io/terraform-provider-leifwind/internal/lookup"
 )
 

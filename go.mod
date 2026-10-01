@@ -2,7 +2,7 @@ module github.com/leifwind-io/terraform-provider-leifwind
 
 go 1.25.8
 
-replace github.com/leifwind-io/leifwind-go => ./client
+replace github.com/leifwind-io/leifwind-go => ../go-client
 
 require (
 	github.com/google/uuid v1.6.0

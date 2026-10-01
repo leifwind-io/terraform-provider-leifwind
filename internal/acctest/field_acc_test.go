@@ -13,7 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
-	"github.com/leifwind-io/leifwind-go"
+	client "github.com/leifwind-io/leifwind-go"
 )
 
 func fieldConfig(token, projectName, fragmentName string) string {

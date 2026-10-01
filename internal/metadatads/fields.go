@@ -10,8 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-
-	"github.com/leifwind-io/leifwind-go"
+	client "github.com/leifwind-io/leifwind-go"
 )
 
 var (

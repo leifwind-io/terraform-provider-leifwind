@@ -14,7 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/leifwind-io/leifwind-go"
+	client "github.com/leifwind-io/leifwind-go"
 	"github.com/leifwind-io/terraform-provider-leifwind/internal/metadatads"
 	"github.com/leifwind-io/terraform-provider-leifwind/internal/metadatares"
 )
