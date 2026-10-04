@@ -1,0 +1,34 @@
+# PSR's config for this Go module: `semantic-release -c releaserc.toml`, run from
+# this directory (spec §5). Go has no pyproject.toml to hold it.
+
+# This package's releases (spec §5 "Versioning"): `provider/vX.Y.Z`, computed by
+# PSR from the conventional commits that touch path_filters, run from this
+# directory. Compute-only: CI creates the tag and its Release server-side
+# (ci/release_tag.sh); PSR never pushes, commits or writes files.
+[semantic_release]
+tag_format = "provider/v{version}"
+commit_parser = "conventional-monorepo"
+major_on_zero = false
+# PSR 10 defaults allow_zero_version to false, which would mint 1.0.0 on the
+# first run (verified with PSR 10.6.1, spec key decision 7).
+allow_zero_version = true
+
+[semantic_release.commit_parser_options]
+# Relative to this directory: the module alone (its go-client comes through go.mod).
+path_filters = [
+  ".",
+]
+
+[semantic_release.remote]
+# Compute-only never calls the API, but PSR parses the origin URL regardless.
+type = "gitlab"
+
+[semantic_release.branches.main]
+match = "main"
+prerelease = false
+
+# hotfix/* and rc/* mint X.Y.Z-rc.N; only main moves `latest`.
+[semantic_release.branches.prerelease]
+match = "^(hotfix|rc)/"
+prerelease = true
+prerelease_token = "rc"
