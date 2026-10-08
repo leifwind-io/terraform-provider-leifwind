@@ -43,7 +43,7 @@ The provider supports two auth paths, mutually exclusive:
 
 | Path | Attributes | Env var fallback | Use case |
 | --- | --- | --- | --- |
-| Static/delegated token | `token` | `LEIFWIND_TOKEN` | A token acquired elsewhere is handed to the provider as-is. This is the path used by leifwind's delegated apply-runner (internal): the frontend authenticates a human user via ZITADEL, and the runner forwards that user's token unchanged, so Terraform operations are attributed to the delegating user, not a service identity. |
+| Static/delegated token | `token` | `LEIFWIND_TOKEN` | A token acquired elsewhere is handed to the provider as-is. This is the path used by leifwind's delegated apply-runner: the frontend authenticates a human user via ZITADEL, and the runner forwards that user's token unchanged, so Terraform operations are attributed to the delegating user, not a service identity. |
 | `client_credentials` (M2M) | `issuer`, `client_id`, `client_secret`, `audience` | `LEIFWIND_OIDC_ISSUER`, `LEIFWIND_CLIENT_ID`, `LEIFWIND_CLIENT_SECRET`, `LEIFWIND_OIDC_AUDIENCE` | Operator/local or service-to-service use: the provider exchanges client credentials for a bearer token itself and refreshes it automatically before expiry. |
 
 Both paths also take `endpoint` / `LEIFWIND_ENDPOINT` (the backend base URL).
@@ -70,7 +70,7 @@ Complete attribute reference: [`docs/index.md`](docs/index.md).
 ### Known backend quirks to be aware of
 
 - **Project names are globally unique across all tenants**, not just within
-  your organization (internal). This is intended — a consequence of the
+  your organization. This is intended — a consequence of the
   schema-per-project design, where each project maps to its own Postgres
   schema and schema names are database-global. Namespace project names per
   organization to avoid collisions. See
@@ -97,9 +97,9 @@ provider always builds against the client's working-tree copy. The
   a running backend stack (`make stack-up stack-seed` at the monorepo root) —
   Docker is still needed once, to boot that stack via compose, just not for
   each acceptance run.
-- **One-time registry login** for the private backend test image:
-  `docker login registry.example.invalid` using a personal access token with the
-  `read_registry` scope.
+- **A backend image** for boot mode, named by `LEIFWIND_BACKEND_IMAGE`; the
+  upstream's private test image needs a one-time `docker login` with a
+  personal access token that has the `read_registry` scope.
 - **Go ≥ 1.26**.
 - **`tofu`** (OpenTofu CLI) on `PATH` — the acceptance suite drives real
   `plan`/`apply`/`destroy` cycles through it.

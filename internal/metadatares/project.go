@@ -46,7 +46,7 @@ func (r *projectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "A leifwind metadata project. The name is immutable (changes force replacement).\n\n" +
 			"~> **Note:** project names are globally unique across *all* tenants, not just within your " +
-			"organization (internal) — this is intended, a consequence of the schema-per-project design " +
+			"organization — this is intended, a consequence of the schema-per-project design " +
 			"(each project maps to its own Postgres schema, and schema names are database-global). Pick " +
 			"project names accordingly, e.g. by namespacing them per organization.",
 		Attributes: map[string]schema.Attribute{

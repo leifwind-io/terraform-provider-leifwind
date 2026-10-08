@@ -4,14 +4,14 @@ page_title: "leifwind_project Resource - leifwind"
 subcategory: ""
 description: |-
   A leifwind metadata project. The name is immutable (changes force replacement).
-  ~> Note: project names are globally unique across all tenants, not just within your organization (internal) — this is intended, a consequence of the schema-per-project design (each project maps to its own Postgres schema, and schema names are database-global). Pick project names accordingly, e.g. by namespacing them per organization.
+  ~> Note: project names are globally unique across all tenants, not just within your organization — this is intended, a consequence of the schema-per-project design (each project maps to its own Postgres schema, and schema names are database-global). Pick project names accordingly, e.g. by namespacing them per organization.
 ---
 
 # leifwind_project (Resource)
 
 A leifwind metadata project. The name is immutable (changes force replacement).
 
-~> **Note:** project names are globally unique across *all* tenants, not just within your organization (internal) — this is intended, a consequence of the schema-per-project design (each project maps to its own Postgres schema, and schema names are database-global). Pick project names accordingly, e.g. by namespacing them per organization.
+~> **Note:** project names are globally unique across *all* tenants, not just within your organization — this is intended, a consequence of the schema-per-project design (each project maps to its own Postgres schema, and schema names are database-global). Pick project names accordingly, e.g. by namespacing them per organization.
 
 ## Example Usage
 
