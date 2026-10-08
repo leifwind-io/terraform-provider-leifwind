@@ -28,7 +28,7 @@ resource "leifwind_project" "p" {
 }
 
 // TestAccDelegatedUserToken drives an apply with a REAL user-scoped token
-// (sub = human user, email claim) — the internal runner pattern.
+// (sub = human user, email claim) — the delegated apply-runner's pattern.
 func TestAccDelegatedUserToken(t *testing.T) {
 	PreCheck(t)
 	t.Parallel()

@@ -150,7 +150,7 @@ resource "leifwind_entity" "e" {
 // lifetime too. So this test boots its OWN dedicated Stack
 // (leifwindtest.Start) instead and pays the extra container-boot cost.
 //
-// The wait is NOT just "past the token's exp" (internal): a second spike (raw
+// The wait is NOT just "past the token's exp": a second spike (raw
 // HTTP, bypassing Terraform, single fresh token, no reuse) showed the
 // backend still accepts this exact JWT up to ~55s past its own exp claim
 // (200 at +10s and +25s past exp; 401 first observed at +55s past exp).
@@ -160,7 +160,7 @@ resource "leifwind_entity" "e" {
 // roughly 30-50s in the backend's JWT validation, though the exact
 // mechanism is unconfirmed (backend source is out of scope here; reported
 // to the owner as a finding — see task-27 report). Because the exact
-// leeway boundary is the backend's business (internal), we don't hardcode a
+// leeway boundary is the backend's business, we don't hardcode a
 // sleep past it: we poll an authenticated backend route with the expired-
 // lifetime token every 3s until the FIRST 401 (cap 150s, comfortably past
 // the observed ~55s boundary), then run the Terraform step against the
@@ -179,7 +179,7 @@ func TestAccExpiredToken(t *testing.T) {
 	org := s.NewOrg(t)
 	tok := org.Token(t, s)
 
-	// internal poll (see doc comment): wait for the backend itself to start
+	// Poll (see doc comment): wait for the backend itself to start
 	// rejecting the token instead of sleeping past a guessed leeway. The
 	// probe goes through the client module (depguard dogfooding rule bans
 	// net/http under internal/**), retries disabled so each probe is
@@ -197,7 +197,7 @@ func TestAccExpiredToken(t *testing.T) {
 			break // first 401: the backend now rejects the expired token
 		}
 		if time.Now().After(pollDeadline) {
-			t.Fatalf("backend never rejected the expired token within 150s (internal leeway grew?); last err: %v", err)
+			t.Fatalf("backend never rejected the expired token within 150s (has the backend's exp leeway grown?); last err: %v", err)
 		}
 		time.Sleep(3 * time.Second)
 	}

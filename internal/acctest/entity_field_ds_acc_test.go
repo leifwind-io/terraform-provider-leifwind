@@ -13,7 +13,7 @@ import (
 // ("f"). The FRAGMENT field references the KEY field via key_field_ids,
 // which both satisfies the field's create-time validation (Tasks 1-3) and
 // creates the Terraform graph edge that orders KEY-before-FRAGMENT on create
-// and FRAGMENT-before-KEY on destroy (both backend-enforced, internal; see
+// and FRAGMENT-before-KEY on destroy (both backend-enforced; see
 // fieldConfig's comment in field_acc_test.go for the same pattern).
 //
 // pattern = "body" on the "leifwind_fields.all" data source isolates the
@@ -104,7 +104,7 @@ data "leifwind_field" "by_id" {
 				resource.TestCheckResourceAttr("data.leifwind_fields.all", "fields.#", "1"),
 				resource.TestCheckResourceAttr("data.leifwind_fields.all", "fields.0.data_type", "TEXT"),
 				// by-id lookups agree with the by-name blocks (covers the by-id
-				// read paths incl. keep-config-id logic; internal)
+				// read paths incl. keep-config-id logic)
 				resource.TestCheckResourceAttrPair("data.leifwind_entity.by_id", "id", "data.leifwind_entity.by_name", "id"),
 				resource.TestCheckResourceAttrPair("data.leifwind_entity.by_id", "name", "data.leifwind_entity.by_name", "name"),
 				resource.TestCheckResourceAttrPair("data.leifwind_entity.by_id", "unique_key", "data.leifwind_entity.by_name", "unique_key"),
@@ -114,13 +114,13 @@ data "leifwind_field" "by_id" {
 				resource.TestCheckResourceAttrPair("data.leifwind_field.by_id", "connection_type", "data.leifwind_field.by_name", "connection_type"),
 				resource.TestCheckResourceAttrPair("data.leifwind_field.by_id", "fragment_name", "data.leifwind_field.by_name", "fragment_name"),
 				resource.TestCheckResourceAttrPair("data.leifwind_field.by_id", "unique_key", "data.leifwind_field.by_name", "unique_key"),
-				// one unique_key assertion per singular data source (internal)
+				// one unique_key assertion per singular data source
 				resource.TestCheckResourceAttrPair("data.leifwind_entity.by_name", "unique_key", "leifwind_entity.e", "unique_key"),
 				resource.TestCheckResourceAttrPair("data.leifwind_field.by_name", "unique_key", "leifwind_field.f", "unique_key"),
-				// pattern-filtered entities listing (internal)
+				// pattern-filtered entities listing
 				resource.TestCheckResourceAttr("data.leifwind_entities.filtered", "entities.#", "1"),
 				resource.TestCheckResourceAttr("data.leifwind_entities.filtered", "entities.0.name", "book"),
-				// FRAGMENT projection in the fields listing (fields.go:116-120; internal)
+				// FRAGMENT projection in the fields listing (fields.go:116-120)
 				resource.TestCheckResourceAttr("data.leifwind_fields.all", "fields.0.connection_type", "FRAGMENT"),
 				resource.TestCheckResourceAttr("data.leifwind_fields.all", "fields.0.fragment_name", "content"),
 			),

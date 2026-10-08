@@ -19,9 +19,9 @@ import (
 func fieldConfig(token, projectName, fragmentName string) string {
 	// The FRAGMENT field references the KEY field via key_field_ids, which
 	// creates the Terraform graph edge that orders KEY-before-FRAGMENT on
-	// create and FRAGMENT-before-KEY on destroy (both backend-enforced, internal).
+	// create and FRAGMENT-before-KEY on destroy (both backend-enforced).
 	// projectName is a parameter because parallel tests share one backend and
-	// project names are globally unique (internal) — each caller needs its own.
+	// project names are globally unique — each caller needs its own.
 	return ProviderConfig(token) + fmt.Sprintf(`
 resource "leifwind_project" "p" {
   name = %q
@@ -291,7 +291,8 @@ func TestAccFieldDriftRecreates(t *testing.T) {
 	org := NewOrg(t)
 	tok := org.Token(t, Stack())
 	// dedicated project name: acc_fld_proj is taken by the lifecycle test
-	// running in parallel against the same backend (internal)
+	// running in parallel against the same backend (project names are
+	// globally unique)
 	cfg := fieldConfig(tok, "acc_fld_drift", "content")
 	c, err := client.New(Stack().BackendURL, client.WithTokenSource(client.StaticToken(tok)))
 	if err != nil {
@@ -320,7 +321,7 @@ func TestAccFieldDriftRecreates(t *testing.T) {
 			},
 			{
 				PreConfig: func() {
-					// Drift the FRAGMENT field, not the KEY one: internal ordering
+					// Drift the FRAGMENT field, not the KEY one: the backend's ordering
 					// (FRAGMENT deleted before KEY) — the backend refuses to
 					// delete a KEY field while a FRAGMENT still references it.
 					pid, perr := uuid.Parse(projectID)

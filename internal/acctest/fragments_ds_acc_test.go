@@ -14,7 +14,7 @@ import (
 // key_field_ids, which both satisfies the field's create-time validation
 // (Tasks 1-3) and creates the Terraform graph edge that orders
 // KEY-before-FRAGMENT on create and FRAGMENT-before-KEY on destroy
-// (both backend-enforced, internal; see fieldConfig's comment in
+// (both backend-enforced; see fieldConfig's comment in
 // field_acc_test.go for the same pattern).
 func TestAccEntityFragmentsDataSource(t *testing.T) {
 	PreCheck(t)

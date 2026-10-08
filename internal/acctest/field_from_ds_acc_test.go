@@ -24,7 +24,7 @@ func provisionEntityWithKey(t *testing.T, tok string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Project names are globally unique across tenants (internal) — use a unique one.
+	// Project names are globally unique across tenants — use a unique one.
 	name := "acc_fld_ds_" + uuid.NewString()[:8]
 	p, err := c.Metadata.UpsertProject(ctx, client.MetadataProject{Name: name})
 	if err != nil {
@@ -47,7 +47,7 @@ func provisionEntityWithKey(t *testing.T, tok string) string {
 	return name
 }
 
-// TestAccFieldFromDataSources proves the adoption path (internal style): read a
+// TestAccFieldFromDataSources proves the adoption path (as the delegated apply-runner does): read a
 // pre-existing entity and its KEY field entirely via data sources, then create
 // a NEW FRAGMENT field via the resource with key_field_ids sourced from the
 // data source. Nothing is imported into Terraform state — the data sources
