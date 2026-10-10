@@ -10,9 +10,9 @@ metadata objects against a running leifwind backend.
 Registry source address: **`leifwind-io/leifwind`**.
 
 The provider is built on a standalone, importable Go client
-(`github.com/leifwind-io/leifwind-go`) with zero `terraform-plugin-*`
-dependencies — see [`../go-client/README.md`](../go-client/README.md) if you
-want to talk to the metadata API from your own Go code without Terraform.
+([`github.com/leifwind-io/leifwind-go`](https://github.com/leifwind-io/leifwind-go))
+with zero `terraform-plugin-*` dependencies: use it to talk to the metadata API
+from your own Go code without Terraform.
 
 ## Install
 
@@ -84,11 +84,12 @@ Complete attribute reference: [`docs/index.md`](docs/index.md).
 ## Development
 
 The provider is one package of the leifwind monorepo, next to the Go client
-it is built on (`../go-client`). The monorepo's root `go.work` uses both
-modules, and the provider's `go.mod` has a
-`replace github.com/leifwind-io/leifwind-go => ../go-client` directive, so the
-provider always builds against the client's working-tree copy. The
-`replace` goes once the client is published on its own.
+it is built on (`../go-client`). Its `go.mod` requires the published client
+(`github.com/leifwind-io/leifwind-go`). The monorepo's root `go.work` uses
+both modules, so a build there takes the client's working-tree copy;
+`GOWORK=off` builds against the published client, as a clone of this
+repository does. A provider change that needs a newer client waits for that
+client's release and a `require` bump.
 
 ### Local prerequisites
 

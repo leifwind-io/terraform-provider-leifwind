@@ -2,15 +2,13 @@ module github.com/leifwind-io/terraform-provider-leifwind
 
 go 1.26.0
 
-replace github.com/leifwind-io/leifwind-go => ../go-client
-
 require (
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/terraform-plugin-framework v1.19.0
 	github.com/hashicorp/terraform-plugin-framework-validators v0.19.0
 	github.com/hashicorp/terraform-plugin-go v0.31.0
 	github.com/hashicorp/terraform-plugin-testing v1.16.0
-	github.com/leifwind-io/leifwind-go v0.0.0-00010101000000-000000000000
+	github.com/leifwind-io/leifwind-go v0.1.0
 )
 
 require (
