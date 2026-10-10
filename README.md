@@ -150,9 +150,8 @@ Not everything attaches: tests that mutate instance-wide ZITADEL state (and
 anything using `WithToxiproxy`) need a dedicated booted stack and skip in
 attach mode — CI runs them in the scheduled `provider:test-acceptance-boot`
 job. In per-MR CI, `provider:test-acceptance` runs in attach mode against
-GitLab `services:` and the monorepo's own backend (no Docker-in-Docker); see
-`ci/provider.yml` and `docs/stack.md` for the `.leifwind-stack` template
-contract.
+GitLab `services:` and the monorepo's own backend (no Docker-in-Docker), so
+the same attach-mode contract holds without booting containers.
 
 ### Monorepo primary, GitHub mirror
 
@@ -168,5 +167,7 @@ The monorepo's release pipeline cuts provider releases from `provider/vX.Y.Z`
 tags, after the Go client version the provider requires is published: it
 pushes the scrubbed history and the plain `vX.Y.Z` tag to the mirror, then
 runs goreleaser there, which builds and GPG-signs the cross-platform archives
-and publishes the GitHub Release both registries index. That pipeline does
-not exist yet; until it does, the provider is not released.
+and publishes the GitHub Release both registries index. So a `provider/vX.Y.Z`
+tag in the monorepo publishes the scrubbed source to this repository as
+`vX.Y.Z` and creates a signed GitHub Release with goreleaser, its assets laid
+out for the Terraform registry.
