@@ -1,8 +1,12 @@
 version: 2
 
-before:
-  hooks:
-    - go mod tidy
+# The Terraform registry's asset names start with the project name (spec
+# A10). Explicit: goreleaser would infer it from the directory, and the
+# release builds in a clone outside the monorepo (provider:release). No
+# `go mod tidy` before-hook: a tidy that changed anything would dirty the tree,
+# and goreleaser refuses to release a dirty one. The committed go.mod and
+# go.sum are the release's.
+project_name: terraform-provider-leifwind
 
 builds:
   - env:
@@ -23,9 +27,24 @@ builds:
         goarch: arm64
     binary: "{{ .ProjectName }}_v{{ .Version }}"
 
+# Reproducible zips (spec A10): every member gets the commit's time and a fixed
+# mode, so a re-run of provider:release uploads the same bytes under the same
+# SHA256SUMS (release.replace_existing_artifacts).
 archives:
   - formats: [zip]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    builds_info:
+      mode: 0755
+      mtime: "{{ .CommitDate }}"
+    files:
+      - src: LICENSE
+        info:
+          mode: 0644
+          mtime: "{{ .CommitDate }}"
+      - src: README.md
+        info:
+          mode: 0644
+          mtime: "{{ .CommitDate }}"
 
 checksum:
   extra_files:
@@ -34,6 +53,9 @@ checksum:
   name_template: "{{ .ProjectName }}_{{ .Version }}_SHA256SUMS"
   algorithm: sha256
 
+# A binary detached signature (no --armor): the registry reads no other. The
+# key is RSA without a passphrase (owner, 2026-10-09); provider:release imports
+# it into a throwaway GNUPGHOME.
 signs:
   - artifacts: checksum
     args:
@@ -45,28 +67,16 @@ signs:
       - "--detach-sign"
       - "${artifact}"
 
+# The notes are git-cliff's, from the scrubbed history (provider:mirror, spec
+# A8), passed with --release-notes; there is no changelog section to drift from
+# them. vX.Y.Z-rc.N is a prerelease, and a re-run replaces the first run's
+# assets.
 release:
   github:
     owner: leifwind-io
     name: terraform-provider-leifwind
+  prerelease: auto
+  replace_existing_artifacts: true
   extra_files:
     - glob: "terraform-registry-manifest.json"
       name_template: "{{ .ProjectName }}_{{ .Version }}_manifest.json"
-
-changelog:
-  use: git
-  groups:
-    - title: Features
-      regexp: '^.*?feat(\(.+\))??!?:.+$'
-      order: 100
-    - title: Fixes
-      regexp: '^.*?fix(\(.+\))??!?:.+$'
-      order: 200
-    - title: Other
-      order: 999
-  filters:
-    exclude:
-      - '^docs'
-      - '^test'
-      - '^ci'
-      - '^chore'
